@@ -193,6 +193,8 @@ void uds_bootloader_init(void) {
     s_bl_ctx.target_slot_addr = UDS_BL_APP_SLOT_B_START;
     s_bl_ctx.download_in_progress = false;
     s_bl_ctx.candidate_verified = false;
+    s_bl_ctx.last_erase_result = 0x00U;
+    s_bl_ctx.last_check_memory_result = 0x01U;
     (void)memset(&s_bl_ctx.staging_metadata, 0, sizeof(s_bl_ctx.staging_metadata));
 
     /* Configure download memory map */
@@ -311,20 +313,35 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
                                                  uint16_t in_len, uint8_t *out, uint16_t *out_len,
                                                  uint16_t capacity) {
     (void)context;
-    if ((subfunction != 0x01U) || (out == NULL) || (out_len == NULL) || (capacity < 1U)) {
+    if (((subfunction != UDS_ROUTINE_SUBFUNCTION_START_ROUTINE) &&
+         (subfunction != UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS)) ||
+        (out == NULL) || (out_len == NULL) || (capacity < 1U)) {
         return UDS_RESULT_OUT_OF_RANGE;
     }
 
     if (routine_id == UDS_BL_ROUTINE_ERASE_MEMORY) {
+        if (subfunction == UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS) {
+            out[0] = s_bl_ctx.last_erase_result;
+            *out_len = 1U;
+            return UDS_RESULT_OK;
+        }
         /* Routine 0xFF00: Erase Slot B */
         UdsDownloadResult res =
             bootloader_flash_erase_start(NULL, UDS_BL_APP_SLOT_B_START, UDS_BL_APP_SLOT_B_SIZE);
-        out[0] = (uint8_t)((res == UDS_DOWNLOAD_OK) ? 0x00U : 0x01U); /* 0x00 = success */
+        uint8_t status = (uint8_t)((res == UDS_DOWNLOAD_OK) ? 0x00U : 0x01U); /* 0x00 = success */
+        s_bl_ctx.last_erase_result = status;
+        out[0] = status;
         *out_len = 1U;
         return (res == UDS_DOWNLOAD_OK) ? UDS_RESULT_OK : UDS_RESULT_ERROR;
     }
 
     if (routine_id == UDS_BL_ROUTINE_CHECK_MEMORY) {
+        if (subfunction == UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS) {
+            out[0] = s_bl_ctx.last_check_memory_result;
+            *out_len = 1U;
+            return UDS_RESULT_OK;
+        }
+
         /* Routine 0x0202: Verify Checksum/Hash, Anti-Rollback, and Cryptographic Signature */
         const FirmwareMetadata_t *meta =
             (const FirmwareMetadata_t *)(uintptr_t)UDS_BL_APP_SLOT_B_START;
@@ -337,6 +354,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
 
         /* 1. Magic check */
         if (meta->magic != UDS_BL_METADATA_MAGIC) {
+            s_bl_ctx.last_check_memory_result = 0x01U;
             out[0] = 0x01U; /* Failed validation */
             *out_len = 1U;
             return UDS_RESULT_OUT_OF_RANGE;
@@ -344,6 +362,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
 
         /* 2. Anti-rollback check: Version must be >= currently active monotonic version */
         if (meta->version < s_bl_ctx.active_version) {
+            s_bl_ctx.last_check_memory_result = 0x02U;
             out[0] = 0x02U; /* Rejected: Version downgrade attempt */
             *out_len = 1U;
             return UDS_RESULT_OUT_OF_RANGE;
@@ -363,6 +382,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
 
         /* 4. Match hash digest */
         if (memcmp(computed_hash, meta->sha256, sizeof(computed_hash)) != 0) {
+            s_bl_ctx.last_check_memory_result = 0x03U;
             out[0] = 0x03U; /* Digest mismatch */
             *out_len = 1U;
             return UDS_RESULT_ERROR;
@@ -371,6 +391,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         /* All checks passed: mark candidate verified and ready for activation */
         s_bl_ctx.staging_metadata = *meta;
         s_bl_ctx.candidate_verified = true;
+        s_bl_ctx.last_check_memory_result = 0x00U;
         out[0] = 0x00U; /* 0x00 = Verification Passed */
         *out_len = 1U;
         return UDS_RESULT_OK;
@@ -379,11 +400,44 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
     return UDS_RESULT_NOT_SUPPORTED;
 }
 
+/* Vector Table Sanity Validation Gate (S32K144 / OpenBLT specification) */
+bool uds_bootloader_is_application_valid(uint32_t app_vector_addr) {
+    if ((app_vector_addr < UDS_BL_FLASH_BASE) ||
+        (app_vector_addr >= (UDS_BL_FLASH_BASE + 0x00200000UL))) {
+        return false;
+    }
+    const uint32_t *vectors = (const uint32_t *)(uintptr_t)app_vector_addr;
+    uint32_t initial_msp = vectors[0];
+    uint32_t reset_handler = vectors[1];
+
+    /* 1. Initial MSP must be in SRAM bounds and 8-byte aligned */
+    if ((initial_msp < UDS_BL_RAM_START) || (initial_msp > UDS_BL_RAM_END) ||
+        ((initial_msp & 0x7U) != 0U)) {
+        return false;
+    }
+
+    /* 2. Reset Handler must have Thumb bit set and be non-erased */
+    if (((reset_handler & 0x1U) == 0U) || (reset_handler == 0xFFFFFFFFUL)) {
+        return false;
+    }
+
+    uint32_t reset_addr = reset_handler & ~1U;
+    if ((reset_addr < app_vector_addr) || (reset_addr >= (UDS_BL_FLASH_BASE + 0x00200000UL))) {
+        return false;
+    }
+    return true;
+}
+
 typedef void (*AppEntryFn)(void);
 
-/* Cortex-M7 Vector Jump & Cache Flush */
+/* Cortex-M7 Vector Jump, Barrier Synchronization & Cache Maintenance */
 void uds_bootloader_jump_to_app(uint32_t app_vector_addr) {
 #if defined(CORTEX_M7) || defined(STM32F767xx)
+    /* Sanity gate: Validate vector table before attempting execution */
+    if (!uds_bootloader_is_application_valid(app_vector_addr)) {
+        return;
+    }
+
     uint32_t app_msp = *(__IO uint32_t *)(uintptr_t)app_vector_addr;
     AppEntryFn app_entry =
         (AppEntryFn)(uintptr_t)(*(__IO uint32_t *)(uintptr_t)(app_vector_addr + 4U));
@@ -402,16 +456,26 @@ void uds_bootloader_jump_to_app(uint32_t app_vector_addr) {
         NVIC->ICPR[i] = 0xFFFFFFFFUL;
     }
 
-    /* 4. Disable and clean Cortex-M7 L1 Caches */
+    /* 4. Clear pending system exceptions (PendSV, SysTick) */
+    SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk | SCB_ICSR_PENDSVCLR_Msk;
+
+    /* 5. Disable and clean Cortex-M7 L1 Caches */
     SCB_DisableICache();
     SCB_DisableDCache();
     SCB_InvalidateICache();
     SCB_CleanInvalidateDCache();
 
-    /* 5. Set Vector Table Offset Register (VTOR) */
+    /* 6. Set Vector Table Offset Register (VTOR) */
     SCB->VTOR = app_vector_addr;
 
-    /* 6. Set Main Stack Pointer and jump to application reset handler */
+    /* 7. Reset CONTROL register to Privileged Thread Mode on MSP */
+    __set_CONTROL(0U);
+
+    /* 8. Memory Synchronization Barriers */
+    __DSB();
+    __ISB();
+
+    /* 9. Set Main Stack Pointer and branch to reset handler */
     __set_MSP(app_msp);
     app_entry();
 #else

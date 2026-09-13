@@ -52,33 +52,50 @@ static void test_dtc_app_all_subfunctions(void) {
     assert(response[2] == 0x00U);
     assert(response[3] == 0x00U);
 
-    /* 5. Subfunction 0x06: reportDTCExtDataRecordByDTCNumber */
+    /* 5. Subfunction 0x05: reportDTCSnapshotRecordByRecordNumber */
+    uint8_t req_05[] = {0x19U, 0x05U, 0x01U};
+    assert(backend->report(NULL, 0x05U, req_05, sizeof(req_05), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(response[0] == 0x05U);
+
+    /* 6. Subfunction 0x06: reportDTCExtDataRecordByDTCNumber */
     uint8_t req_06[] = {0x19U, 0x06U, 0x01U, 0x00U, 0x00U, 0x01U};
     assert(backend->report(NULL, 0x06U, req_06, sizeof(req_06), response, &resp_len,
                            sizeof(response)) == UDS_RESULT_OK);
     assert(response[0] == 0x06U);
 
-    /* 6. Subfunction 0x14: reportDTCFaultDetectionCounter */
+    /* 7. Subfunction 0x14: reportDTCFaultDetectionCounter */
     uint8_t req_14[] = {0x19U, 0x14U};
     assert(backend->report(NULL, 0x14U, req_14, sizeof(req_14), response, &resp_len,
                            sizeof(response)) == UDS_RESULT_OK);
     assert(response[0] == 0x14U);
 
-    /* 7. Clear DTCs via service 0x14 */
+    /* 8. Clear DTCs via service 0x14 - verify AUTOSAR Dem status byte 0x50 */
     assert(uds_dtc_app_clear(NULL, 0xFFFFFFUL) == UDS_RESULT_OK);
 
-    /* Verify count is now 0 */
+    /* Verify count for active faults is now 0 */
     assert(backend->report(NULL, 0x01U, req_01, sizeof(req_01), response, &resp_len,
                            sizeof(response)) == UDS_RESULT_OK);
     uint16_t cleared_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
     assert(cleared_count == 0U);
 
-    /* 8. Add a new fault dynamically at runtime */
+    /* 9. AUTOSAR Dem Debouncing: reportEvent increments fault counter */
+    /* Initially fault counter is 0; report 8 consecutive failures to cross +127 threshold */
+    for (uint8_t f = 0U; f < 8U; f++) {
+        assert(uds_dtc_app_report_event(0x010000UL, true));
+    }
+    /* Event is now qualified & confirmed */
+    assert(backend->report(NULL, 0x01U, req_01, sizeof(req_01), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    uint16_t debounced_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
+    assert(debounced_count == 1U);
+
+    /* 10. Add a new fault dynamically at runtime */
     assert(uds_dtc_app_set_fault(0x020000UL, 0x24U, 0x20U, 15));
     assert(backend->report(NULL, 0x01U, req_01, sizeof(req_01), response, &resp_len,
                            sizeof(response)) == UDS_RESULT_OK);
     uint16_t updated_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
-    assert(updated_count == 1U);
+    assert(updated_count == 2U);
 }
 
 static void test_bootloader_flow(void) {
@@ -155,6 +172,17 @@ static void test_bootloader_flow(void) {
                                           &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out[0] == 0x00U); /* Verification Passed */
     assert(uds_bootloader_is_activation_pending());
+
+    /* 5. RoutineControl Subfunction 0x03: requestRoutineResults */
+    assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS,
+                                          UDS_BL_ROUTINE_CHECK_MEMORY, NULL, 0U, routine_out,
+                                          &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
+    assert(routine_out[0] == 0x00U);
+
+    /* 6. Vector Table Sanity Validation Gate (S32K144 / OpenBLT specification) */
+    assert(!uds_bootloader_is_application_valid(0x00000000UL)); /* NULL address */
+    assert(!uds_bootloader_is_application_valid(0x20000000UL)); /* RAM, not Flash */
+    assert(!uds_bootloader_is_application_valid(0x08300000UL)); /* Beyond Flash size */
 }
 
 int main(void) {

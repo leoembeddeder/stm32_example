@@ -120,8 +120,9 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
         break;
     }
 
-    /* 0x04, 0x18: Snapshot Record by DTC Number */
+    /* 0x04, 0x05, 0x18: Snapshot Record by DTC Number / Record Number */
     case 0x04U:
+    case 0x05U:
     case 0x18U: {
         bool found = false;
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
@@ -306,10 +307,10 @@ const UdsDtcBackend *uds_dtc_app_get_backend(void) {
 UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
     (void)context;
     if (group_of_dtc == 0xFFFFFFUL) {
-        /* Clear all DTCs */
+        /* Clear all DTCs - set to 0x50 per AUTOSAR Dem specification */
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
             s_dtc_storage.records[i].active = false;
-            s_dtc_storage.records[i].status_byte = 0x00U;
+            s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
             s_dtc_storage.records[i].fault_counter = 0;
         }
         return UDS_RESULT_OK;
@@ -317,7 +318,7 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
     for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
         if (s_dtc_storage.records[i].dtc_number == group_of_dtc) {
             s_dtc_storage.records[i].active = false;
-            s_dtc_storage.records[i].status_byte = 0x00U;
+            s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
             s_dtc_storage.records[i].fault_counter = 0;
             return UDS_RESULT_OK;
         }
@@ -354,7 +355,43 @@ bool uds_dtc_app_clear_fault(uint32_t dtc) {
     for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
         if (s_dtc_storage.records[i].dtc_number == dtc) {
             s_dtc_storage.records[i].active = false;
-            s_dtc_storage.records[i].status_byte = 0x00U;
+            s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* AUTOSAR Dem counter-based fault debouncing engine */
+bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
+    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+        if (s_dtc_storage.records[i].dtc_number == dtc) {
+            UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+            if (failed) {
+                if (rec->fault_counter < 127) {
+                    rec->fault_counter = (int8_t)(rec->fault_counter + 16);
+                }
+                if (rec->fault_counter >= 127) {
+                    rec->fault_counter = 127;
+                    rec->active = true;
+                    rec->status_byte |=
+                        (uint8_t)(UDS_DTC_STATUS_TEST_FAILED |
+                                  UDS_DTC_STATUS_TEST_FAILED_THIS_CYCLE | UDS_DTC_STATUS_PENDING |
+                                  UDS_DTC_STATUS_CONFIRMED | UDS_DTC_STATUS_TEST_FAILED_SLC);
+                    rec->status_byte &= (uint8_t)~(UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC |
+                                                   UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
+                }
+            } else {
+                if (rec->fault_counter > -128) {
+                    rec->fault_counter = (int8_t)(rec->fault_counter - 16);
+                }
+                if (rec->fault_counter <= -128) {
+                    rec->fault_counter = -128;
+                    rec->status_byte &= (uint8_t)~UDS_DTC_STATUS_TEST_FAILED;
+                    rec->status_byte &= (uint8_t)~(UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC |
+                                                   UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
+                }
+            }
             return true;
         }
     }

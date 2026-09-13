@@ -31,10 +31,25 @@ typedef struct {
     uint8_t record_count;
 } UdsDtcAppStorage;
 
+/* ISO 14229-1 Annex D DTC Status Mask Bitfield Definitions */
+#define UDS_DTC_STATUS_TEST_FAILED (1U << 0U)            /* 0x01 */
+#define UDS_DTC_STATUS_TEST_FAILED_THIS_CYCLE (1U << 1U) /* 0x02 */
+#define UDS_DTC_STATUS_PENDING (1U << 2U)                /* 0x04 */
+#define UDS_DTC_STATUS_CONFIRMED (1U << 3U)              /* 0x08 */
+#define UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC (1U << 4U) /* 0x10 */
+#define UDS_DTC_STATUS_TEST_FAILED_SLC (1U << 5U)        /* 0x20 */
+#define UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC (1U << 6U) /* 0x40 */
+#define UDS_DTC_STATUS_WARNING_INDICATOR_REQ (1U << 7U)  /* 0x80 */
+
+/* Status byte after ClearDiagnosticInformation (0x14) per AUTOSAR Dem specification */
+#define UDS_DTC_STATUS_CLEARED                                                                     \
+    (UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC | UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC) /* 0x50 */
+
 void uds_dtc_app_init(void);
 const UdsDtcBackend *uds_dtc_app_get_backend(void);
 UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc);
 bool uds_dtc_app_set_fault(uint32_t dtc, uint8_t status, uint8_t severity, int8_t counter);
 bool uds_dtc_app_clear_fault(uint32_t dtc);
+bool uds_dtc_app_report_event(uint32_t dtc, bool failed);
 
 #endif /* STM32_UDS_ISO_TP_UDS_DTC_APP_H */

@@ -22,6 +22,13 @@
 #define UDS_BL_ROUTINE_ERASE_MEMORY 0xFF00U
 #define UDS_BL_ROUTINE_CHECK_MEMORY 0x0202U
 
+#define UDS_ROUTINE_SUBFUNCTION_START_ROUTINE 0x01U
+#define UDS_ROUTINE_SUBFUNCTION_STOP_ROUTINE 0x02U
+#define UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS 0x03U
+
+#define UDS_BL_RAM_START 0x20000000UL
+#define UDS_BL_RAM_END 0x20080000UL
+
 typedef enum {
     UDS_BL_SLOT_INVALID = 0,
     UDS_BL_SLOT_CANDIDATE = 1,
@@ -45,6 +52,8 @@ typedef struct {
     uint32_t target_slot_addr;
     bool download_in_progress;
     bool candidate_verified;
+    uint8_t last_erase_result;
+    uint8_t last_check_memory_result;
     FirmwareMetadata_t staging_metadata;
 } UdsBootloaderContext;
 
@@ -53,6 +62,7 @@ UdsDownloadMemoryMap uds_bootloader_get_memory_map(void);
 uint32_t uds_bootloader_get_active_version(void);
 uint32_t uds_bootloader_get_active_slot(void);
 bool uds_bootloader_is_activation_pending(void);
+bool uds_bootloader_is_application_valid(uint32_t app_vector_addr);
 
 /* UDS Service Callbacks for Flashing Pipeline */
 UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t address, uint32_t length,
