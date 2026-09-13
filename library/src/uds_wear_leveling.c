@@ -115,7 +115,7 @@ int uds_param_init(UdsParamStore *store, const UdsFlashPort *port, uint32_t flas
         for (uint16_t sl = 0U; sl < store->slots_per_sector; ++sl) {
             UdsParamSlotHeader hdr;
             if (read_slot_header(store, sec, sl, &hdr)) {
-                if (!found_valid || (hdr.seq > best_seq)) {
+                if (!found_valid || ((int16_t)(hdr.seq - best_seq) > 0)) {
                     best_seq = hdr.seq;
                     best_sec = sec;
                     best_slot = sl;
@@ -129,6 +129,9 @@ int uds_param_init(UdsParamStore *store, const UdsFlashPort *port, uint32_t flas
         store->active_sector = best_sec;
         store->active_slot = best_slot;
         store->next_seq = (uint16_t)(best_seq + 1U);
+        if (store->next_seq == 0U) {
+            store->next_seq = 1U;
+        }
         store->has_active_slot = true;
     }
 
@@ -211,6 +214,9 @@ int uds_param_save(UdsParamStore *store, const void *data) {
     store->active_sector = sec;
     store->active_slot = sl;
     store->next_seq = (uint16_t)(store->next_seq + 1U);
+    if (store->next_seq == 0U) {
+        store->next_seq = 1U;
+    }
     store->has_active_slot = true;
 
     return UDS_PARAM_OK;

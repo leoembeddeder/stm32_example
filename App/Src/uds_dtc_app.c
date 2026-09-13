@@ -522,6 +522,9 @@ bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
                     if (rec->aging_counter < 255U) {
                         rec->aging_counter++;
                     }
+                    if (rec->aging_counter >= 40U) {
+                        rec->status_byte &= (uint8_t)~UDS_DTC_STATUS_CONFIRMED;
+                    }
                 }
             }
             (void)uds_dtc_app_save_to_nvm();

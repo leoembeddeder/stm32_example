@@ -248,11 +248,39 @@ static void test_dtc_persistence_integration(void) {
     assert(uds_dtc_app_load_from_nvm());
 }
 
+static void test_sequence_rollover(void) {
+    memset(s_ram_flash, 0xFF, sizeof(s_ram_flash));
+    UdsParamStore store;
+    assert(uds_param_init(&store, &s_test_flash_port, 0U, TEST_SECTOR_COUNT, sizeof(TestData)) ==
+           UDS_PARAM_OK);
+
+    /* Force sequence number near rollover */
+    store.next_seq = 65535U;
+    TestData d1 = {.sensor_val = 0x1111U, .flags = 1U, .mode = 1U};
+    assert(uds_param_save(&store, &d1) == UDS_PARAM_OK);
+    assert(store.next_seq == 1U); /* Rollover should skip 0 */
+
+    TestData d2 = {.sensor_val = 0x2222U, .flags = 2U, .mode = 2U};
+    assert(uds_param_save(&store, &d2) == UDS_PARAM_OK);
+
+    /* Reboot simulation: re-init store and ensure d2 (seq 1) is selected over d1 (seq 65535) */
+    UdsParamStore reboot_store;
+    assert(uds_param_init(&reboot_store, &s_test_flash_port, 0U, TEST_SECTOR_COUNT,
+                          sizeof(TestData)) == UDS_PARAM_OK);
+    assert(reboot_store.has_active_slot);
+
+    TestData recovered;
+    assert(uds_param_load(&reboot_store, &recovered) == UDS_PARAM_OK);
+    assert(recovered.sensor_val == 0x2222U);
+    assert(recovered.flags == 2U);
+}
+
 int main(void) {
     test_crc16();
     test_basic_wear_leveling();
     test_sector_rotation();
     test_power_loss_recovery();
+    test_sequence_rollover();
     test_dtc_persistence_integration();
     return 0;
 }
