@@ -2,6 +2,8 @@
 
 #include "uds_platform.h"
 #include "uds_app_config.h"
+#include "uds_dtc_app.h"
+#include "uds_bootloader.h"
 #include "uds_iso_tp/endpoint.h"
 #include "uds_iso_tp/uds.h"
 
@@ -52,6 +54,9 @@ static UdsCallbackResult uds_app_ecu_reset_prepare(void *context, uint8_t subfun
 
 static void uds_app_ecu_reset_execute(void *context, uint8_t subfunction) {
     (void)context;
+    if (uds_bootloader_is_activation_pending()) {
+        uds_bootloader_jump_to_app(UDS_BL_APP_SLOT_B_START);
+    }
     uds_platform_system_reset(subfunction);
 }
 
@@ -59,6 +64,9 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     if (transport == NULL) {
         return;
     }
+
+    uds_dtc_app_init();
+    uds_bootloader_init();
 
     UdsIsoTpEndpointConfig config = {0};
     isotp_config_classic_can(&config.isotp_config);
@@ -76,6 +84,12 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     config.uds_callbacks.write_did = uds_app_write_did;
     config.uds_callbacks.ecu_reset = uds_app_ecu_reset_prepare;
     config.uds_callbacks.ecu_reset_execute = uds_app_ecu_reset_execute;
+    config.uds_callbacks.dtc_backend = uds_dtc_app_get_backend();
+    config.uds_callbacks.clear_dtc = uds_dtc_app_clear;
+    config.uds_callbacks.request_download = uds_bootloader_request_download;
+    config.uds_callbacks.transfer_data = uds_bootloader_transfer_data;
+    config.uds_callbacks.request_transfer_exit = uds_bootloader_transfer_exit;
+    config.uds_callbacks.routine_control = uds_bootloader_routine_control;
     config.uds_context = transport;
 
     s_transport = transport;
