@@ -255,6 +255,7 @@ UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t addres
     if (res != UDS_DOWNLOAD_OK) {
         return (res == UDS_DOWNLOAD_OUT_OF_RANGE) ? UDS_RESULT_OUT_OF_RANGE : UDS_RESULT_ERROR;
     }
+    (void)uds_download_poll_erase(&s_bl_download, 0U);
     *max_block_length = s_bl_memory_map.max_block_length;
     s_bl_ctx.download_in_progress = true;
     s_bl_ctx.candidate_verified = false;
@@ -267,6 +268,9 @@ UdsCallbackResult uds_bootloader_transfer_data(void *context, uint8_t block_sequ
     (void)context;
     if (!s_bl_ctx.download_in_progress) {
         return UDS_RESULT_SEQUENCE_ERROR;
+    }
+    if (uds_download_state(&s_bl_download) == UDS_DOWNLOAD_ERASING) {
+        (void)uds_download_poll_erase(&s_bl_download, 0U);
     }
     UdsDownloadResult res = uds_download_write(&s_bl_download, block_sequence, data, length, 0U);
     if (res != UDS_DOWNLOAD_OK) {
@@ -289,6 +293,7 @@ UdsCallbackResult uds_bootloader_transfer_exit(void *context, const uint8_t *req
     UdsDownloadResult res = uds_download_finish(&s_bl_download, 0U, false, 0U);
     s_bl_ctx.download_in_progress = false;
     if (res != UDS_DOWNLOAD_OK) {
+        uds_download_abort(&s_bl_download);
         return UDS_RESULT_ERROR;
     }
     if (response != NULL) {

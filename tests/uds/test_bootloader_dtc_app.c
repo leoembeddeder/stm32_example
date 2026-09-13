@@ -99,18 +99,24 @@ static void test_bootloader_flow(void) {
     assert(uds_bootloader_request_download(NULL, 0x08040000UL, 1024U, &max_block) ==
            UDS_RESULT_OUT_OF_RANGE);
 
+    /* 2. TransferData (0x36) and RequestTransferExit (0x37) */
+    uint8_t chunk[64] = {0xAAU};
+
+    /* Sequence error check before download starts */
+    assert(uds_bootloader_transfer_data(NULL, 1U, chunk, sizeof(chunk)) ==
+           UDS_RESULT_SEQUENCE_ERROR);
+
     /* Valid target in Slot B -> must succeed */
-    assert(uds_bootloader_request_download(NULL, UDS_BL_APP_SLOT_B_START, 1024U, &max_block) ==
-           UDS_RESULT_OK);
+    assert(uds_bootloader_request_download(NULL, UDS_BL_APP_SLOT_B_START, sizeof(chunk),
+                                           &max_block) == UDS_RESULT_OK);
     assert(max_block == 256U);
 
-    /* 2. TransferData (0x36) */
-    uint8_t chunk[64] = {0xAAU};
-    assert(uds_bootloader_transfer_data(NULL, 1U, chunk, sizeof(chunk)) == UDS_RESULT_OK);
-
-    /* Sequence error check */
-    assert(uds_bootloader_transfer_data(NULL, 3U, chunk, sizeof(chunk)) ==
+    /* Sequence error check (expected block is 1, block 2 must fail) */
+    assert(uds_bootloader_transfer_data(NULL, 2U, chunk, sizeof(chunk)) ==
            UDS_RESULT_SEQUENCE_ERROR);
+
+    /* 2. TransferData (0x36) */
+    assert(uds_bootloader_transfer_data(NULL, 1U, chunk, sizeof(chunk)) == UDS_RESULT_OK);
 
     /* 3. RequestTransferExit (0x37) */
     uint8_t exit_resp[4];
