@@ -368,8 +368,10 @@ bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
         if (s_dtc_storage.records[i].dtc_number == dtc) {
             UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
             if (failed) {
-                if (rec->fault_counter < 127) {
+                if (rec->fault_counter <= (127 - 16)) {
                     rec->fault_counter = (int8_t)(rec->fault_counter + 16);
+                } else {
+                    rec->fault_counter = 127;
                 }
                 if (rec->fault_counter >= 127) {
                     rec->fault_counter = 127;
@@ -382,8 +384,10 @@ bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
                                                    UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
                 }
             } else {
-                if (rec->fault_counter > -128) {
+                if (rec->fault_counter >= (-128 + 16)) {
                     rec->fault_counter = (int8_t)(rec->fault_counter - 16);
+                } else {
+                    rec->fault_counter = -128;
                 }
                 if (rec->fault_counter <= -128) {
                     rec->fault_counter = -128;
