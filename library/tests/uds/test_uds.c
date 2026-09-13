@@ -221,6 +221,21 @@ static void test_service_attributes(void) {
     assert(!uds_service_attribute_allows(download_attribute, UDS_SESSION_PROGRAMMING, 0U,
                                          UDS_ADDRESS_FUNCTIONAL));
 
+    const UdsServiceAttribute *reset_attr = uds_service_attribute(0x11U, 0U);
+    assert(reset_attr->address_mode == UDS_ADDRESS_MODE_BOTH);
+    assert(
+        uds_service_attribute_allows(reset_attr, UDS_SESSION_DEFAULT, 0U, UDS_ADDRESS_FUNCTIONAL));
+
+    const UdsServiceAttribute *clear_attr = uds_service_attribute(0x14U, 0U);
+    assert(clear_attr->address_mode == UDS_ADDRESS_MODE_BOTH);
+    assert(
+        uds_service_attribute_allows(clear_attr, UDS_SESSION_DEFAULT, 0U, UDS_ADDRESS_FUNCTIONAL));
+
+    const UdsServiceAttribute *control_dtc_attr = uds_service_attribute(0x85U, 0U);
+    assert(control_dtc_attr->address_mode == UDS_ADDRESS_MODE_BOTH);
+    assert(uds_service_attribute_allows(control_dtc_attr, UDS_SESSION_DEFAULT, 0U,
+                                        UDS_ADDRESS_FUNCTIONAL));
+
     const UdsServiceAttribute protected_attribute = {
         0x99U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_EXTENDED, UDS_SECURITY_MASK_LEVEL_1,
         UDS_ADDRESS_PHYSICAL};
@@ -230,9 +245,26 @@ static void test_service_attributes(void) {
                                         UDS_SECURITY_LEVEL_1, UDS_ADDRESS_PHYSICAL));
 }
 
+static uint8_t s_mock_reset_subfunction = 0U;
+static UdsCallbackResult mock_ecu_reset(void *context, uint8_t subfunction) {
+    (void)context;
+    s_mock_reset_subfunction = subfunction;
+    return UDS_RESULT_OK;
+}
+
+static uint32_t s_mock_clear_group = 0U;
+static UdsCallbackResult mock_clear_dtc(void *context, uint32_t group) {
+    (void)context;
+    s_mock_clear_group = group;
+    return UDS_RESULT_OK;
+}
+
 static void test_addressed_dispatch(void) {
-    UdsCallbacks callbacks = {
-        .read_did = read_did, .security_seed = security_seed, .security_key = security_key};
+    UdsCallbacks callbacks = {.read_did = read_did,
+                              .security_seed = security_seed,
+                              .security_key = security_key,
+                              .ecu_reset = mock_ecu_reset,
+                              .clear_dtc = mock_clear_dtc};
     UdsServer server;
     uds_server_init(&server, &callbacks, NULL, 0U);
     uint8_t response[64];
@@ -249,21 +281,58 @@ static void test_addressed_dispatch(void) {
                                        UDS_ADDRESS_FUNCTIONAL, 1U) == UDS_RESULT_NO_RESPONSE);
     assert(response_len == 0U);
 
+    /* 0x11 ECUReset on Functional addressing */
     uint8_t reset_request[] = {0x11U, 0x01U};
     assert(uds_server_handle_addressed(&server, reset_request, sizeof(reset_request), response,
                                        &response_len, sizeof(response), UDS_ADDRESS_FUNCTIONAL,
-                                       2U) == UDS_RESULT_NO_RESPONSE);
+                                       2U) == UDS_RESULT_OK);
+    assert(response_len == 2U && response[0] == 0x51U && response[1] == 0x01U);
+    assert(s_mock_reset_subfunction == 0x01U);
+
+    /* 0x11 with Suppress Positive Response Message Indication Bit on Functional addressing */
+    uint8_t reset_suppress_request[] = {0x11U, 0x81U};
+    assert(uds_server_handle_addressed(&server, reset_suppress_request,
+                                       sizeof(reset_suppress_request), response, &response_len,
+                                       sizeof(response), UDS_ADDRESS_FUNCTIONAL,
+                                       3U) == UDS_RESULT_NO_RESPONSE);
     assert(response_len == 0U);
 
+    /* 0x14 ClearDiagnosticInformation on Functional addressing */
+    uint8_t clear_request[] = {0x14U, 0xFFU, 0xFFU, 0xFFU};
+    assert(uds_server_handle_addressed(&server, clear_request, sizeof(clear_request), response,
+                                       &response_len, sizeof(response), UDS_ADDRESS_FUNCTIONAL,
+                                       4U) == UDS_RESULT_OK);
+    assert(response_len == 1U && response[0] == 0x54U);
+    assert(s_mock_clear_group == 0xFFFFFFU);
+
+    /* 0x85 ControlDTCSetting on Functional addressing */
+    uint8_t dtc_setting_request[] = {0x85U, 0x02U};
+    assert(uds_server_handle_addressed(&server, dtc_setting_request, sizeof(dtc_setting_request),
+                                       response, &response_len, sizeof(response),
+                                       UDS_ADDRESS_FUNCTIONAL, 5U) == UDS_RESULT_OK);
+    assert(response_len == 2U && response[0] == 0xC5U && response[1] == 0x02U);
+    assert(!server.dtc_setting_enabled);
+
+    /* 0x85 with Suppress Positive Response on Functional addressing */
+    uint8_t dtc_setting_suppress[] = {0x85U, 0x81U};
+    assert(uds_server_handle_addressed(&server, dtc_setting_suppress, sizeof(dtc_setting_suppress),
+                                       response, &response_len, sizeof(response),
+                                       UDS_ADDRESS_FUNCTIONAL, 6U) == UDS_RESULT_NO_RESPONSE);
+    assert(response_len == 0U);
+    assert(server.dtc_setting_enabled);
+
+    /* 0x27 SecurityAccess on Physical addressing rejected in default session with NRC */
     assert(uds_server_handle_addressed(&server, security_request, sizeof(security_request),
                                        response, &response_len, sizeof(response),
-                                       UDS_ADDRESS_PHYSICAL, 3U) == UDS_RESULT_OK);
+                                       UDS_ADDRESS_PHYSICAL, 7U) == UDS_RESULT_OK);
     assert(response[0] == 0x7FU && response[1] == 0x27U &&
            response[2] == UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
 
-    assert(uds_server_handle_addressed(&server, reset_request, sizeof(reset_request), response,
-                                       &response_len, sizeof(response), UDS_ADDRESS_PHYSICAL,
-                                       4U) == UDS_RESULT_OK);
+    /* Physical 0x11 with unsupported subfunction returns NRC 0x12 */
+    uint8_t invalid_reset_request[] = {0x11U, 0x7FU};
+    assert(uds_server_handle_addressed(
+               &server, invalid_reset_request, sizeof(invalid_reset_request), response,
+               &response_len, sizeof(response), UDS_ADDRESS_PHYSICAL, 8U) == UDS_RESULT_OK);
     assert(response[0] == 0x7FU && response[1] == 0x11U &&
            response[2] == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
 }

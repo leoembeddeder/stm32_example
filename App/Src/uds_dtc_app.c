@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
+ */
+
 #include "uds_dtc_app.h"
 
 #include <string.h>
@@ -86,33 +90,33 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
         }
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
             const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
-            if (rec->active &&
-                ((subfunction == 0x0AU) || ((rec->status_byte & status_mask) != 0U))) {
+            bool include = false;
+            if (subfunction == 0x0AU) {
+                include = true; /* All supported DTCs */
+            } else if (rec->active) {
+                if (subfunction == 0x15U || subfunction == 0x55U) {
+                    include = ((rec->status_byte & UDS_DTC_STATUS_CONFIRMED) != 0U);
+                } else {
+                    include = ((rec->status_byte & status_mask) != 0U);
+                }
+            }
+            if (include) {
                 if (!append_dtc(response, &len, response_capacity, rec)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
-                /* Single record subfunctions terminate after first match */
-                if ((subfunction == 0x0BU) || (subfunction == 0x0CU) || (subfunction == 0x0DU) ||
-                    (subfunction == 0x0EU)) {
-                    break;
-                }
             }
         }
         break;
     }
 
-    /* 0x03: Snapshot Identification */
+    /* 0x03: Snapshot identification */
     case 0x03U: {
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
             const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
-            if (rec->active && (rec->snapshot_length > 0U)) {
-                if (!append_byte(response, &len, response_capacity,
-                                 (uint8_t)(rec->dtc_number >> 16U)) ||
+            if (rec->active) {
+                if (!append_dtc(response, &len, response_capacity, rec) ||
                     !append_byte(response, &len, response_capacity,
-                                 (uint8_t)(rec->dtc_number >> 8U)) ||
-                    !append_byte(response, &len, response_capacity, (uint8_t)rec->dtc_number) ||
-                    !append_byte(response, &len, response_capacity,
-                                 0x01U /* Snapshot record number */)) {
+                                 0x01U /* Snapshot record 1 */)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
             }
@@ -120,7 +124,7 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
         break;
     }
 
-    /* 0x04, 0x05, 0x18: Snapshot Record by DTC Number / Record Number */
+    /* 0x04, 0x05, 0x18: Snapshot Record by DTC */
     case 0x04U:
     case 0x05U:
     case 0x18U: {
@@ -130,14 +134,40 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             if (rec->active && dtc_matches_request(rec, request, request_length)) {
                 found = true;
                 if (!append_dtc(response, &len, response_capacity, rec) ||
-                    !append_byte(response, &len, response_capacity, 0x01U /* Record # */) ||
-                    !append_byte(response, &len, response_capacity, 0x01U /* 1 DID */) ||
-                    !append_byte(response, &len, response_capacity, 0x01U /* DID high */) ||
-                    !append_byte(response, &len, response_capacity, 0x00U /* DID low */)) {
+                    !append_byte(response, &len, response_capacity, 0x01U /* Record #1 */)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
-                for (uint8_t b = 0U; b < rec->snapshot_length; ++b) {
-                    if (!append_byte(response, &len, response_capacity, rec->snapshot_data[b])) {
+
+                if (rec->snapshot_length > 0U) {
+                    if (!append_byte(response, &len, response_capacity, 0x01U /* 1 DID */) ||
+                        !append_byte(response, &len, response_capacity, 0xDFU) ||
+                        !append_byte(response, &len, response_capacity, 0x00U)) {
+                        return UDS_RESULT_RESPONSE_TOO_LONG;
+                    }
+                    for (uint8_t b = 0U; b < rec->snapshot_length; ++b) {
+                        if (!append_byte(response, &len, response_capacity,
+                                         rec->snapshot_data[b])) {
+                            return UDS_RESULT_RESPONSE_TOO_LONG;
+                        }
+                    }
+                } else {
+                    /* Standard OEM snapshot layout per Diagnostic sheet.xlsx:
+                     * DID DF00: Battery Voltage (2 bytes, 12000 mV = 0x2EE0)
+                     * DID DF01: Vehicle Speed (2 bytes, 0 km/h)
+                     * DID DF02: Occurrence Counter (1 byte)
+                     */
+                    if (!append_byte(response, &len, response_capacity, 0x03U /* 3 DIDs */) ||
+                        !append_byte(response, &len, response_capacity, 0xDFU) ||
+                        !append_byte(response, &len, response_capacity, 0x00U) ||
+                        !append_byte(response, &len, response_capacity, 0x2EU) ||
+                        !append_byte(response, &len, response_capacity, 0xE0U) ||
+                        !append_byte(response, &len, response_capacity, 0xDFU) ||
+                        !append_byte(response, &len, response_capacity, 0x01U) ||
+                        !append_byte(response, &len, response_capacity, 0x00U) ||
+                        !append_byte(response, &len, response_capacity, 0x00U) ||
+                        !append_byte(response, &len, response_capacity, 0xDFU) ||
+                        !append_byte(response, &len, response_capacity, 0x02U) ||
+                        !append_byte(response, &len, response_capacity, rec->occurrence_counter)) {
                         return UDS_RESULT_RESPONSE_TOO_LONG;
                     }
                 }
@@ -160,12 +190,31 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
             if (rec->active && dtc_matches_request(rec, request, request_length)) {
                 found = true;
-                if (!append_dtc(response, &len, response_capacity, rec) ||
-                    !append_byte(response, &len, response_capacity, 0x01U /* Record # */)) {
+                if (!append_dtc(response, &len, response_capacity, rec)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
-                for (uint8_t b = 0U; b < rec->extended_length; ++b) {
-                    if (!append_byte(response, &len, response_capacity, rec->extended_data[b])) {
+
+                if (rec->extended_length > 0U) {
+                    if (!append_byte(response, &len, response_capacity, 0x01U /* Record #1 */)) {
+                        return UDS_RESULT_RESPONSE_TOO_LONG;
+                    }
+                    for (uint8_t b = 0U; b < rec->extended_length; ++b) {
+                        if (!append_byte(response, &len, response_capacity,
+                                         rec->extended_data[b])) {
+                            return UDS_RESULT_RESPONSE_TOO_LONG;
+                        }
+                    }
+                } else {
+                    /* Standard Extended Data per Diagnostic sheet.xlsx:
+                     * Record 0x01: Occurrence counter (1 byte)
+                     * Record 0x02: Aging counter (1 byte)
+                     */
+                    if (!append_byte(response, &len, response_capacity,
+                                     UDS_DTC_EXT_DATA_OCCURRENCES) ||
+                        !append_byte(response, &len, response_capacity, rec->occurrence_counter) ||
+                        !append_byte(response, &len, response_capacity,
+                                     UDS_DTC_EXT_DATA_AGING_COUNTER) ||
+                        !append_byte(response, &len, response_capacity, rec->aging_counter)) {
                         return UDS_RESULT_RESPONSE_TOO_LONG;
                     }
                 }
@@ -220,7 +269,7 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
         break;
     }
 
-    /* 0x14: Fault Detection Counters */
+    /* 0x14: Fault Detection Counter */
     case 0x14U: {
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
             const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
@@ -239,24 +288,75 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
     }
 
     default:
-        return UDS_RESULT_NOT_SUPPORTED;
+        return UDS_RESULT_OUT_OF_RANGE;
     }
 
     *response_length = len;
     return UDS_RESULT_OK;
 }
 
+void uds_dtc_app_attach_nvm(UdsParamStore *store) {
+    s_dtc_storage.nvm_store = store;
+}
+
+bool uds_dtc_app_save_to_nvm(void) {
+    if (s_dtc_storage.nvm_store == NULL) {
+        return false;
+    }
+    UdsDtcNvBlock block;
+    memset(&block, 0, sizeof(block));
+    block.record_count = s_dtc_storage.record_count;
+    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+        block.records[i].dtc_number = s_dtc_storage.records[i].dtc_number;
+        block.records[i].status_byte = s_dtc_storage.records[i].status_byte;
+        block.records[i].severity = s_dtc_storage.records[i].severity;
+        block.records[i].functional_unit = s_dtc_storage.records[i].functional_unit;
+        block.records[i].fault_counter = s_dtc_storage.records[i].fault_counter;
+        block.records[i].occurrence_counter = s_dtc_storage.records[i].occurrence_counter;
+        block.records[i].aging_counter = s_dtc_storage.records[i].aging_counter;
+        block.records[i].active = s_dtc_storage.records[i].active;
+    }
+    return (uds_param_save(s_dtc_storage.nvm_store, &block) == UDS_PARAM_OK);
+}
+
+bool uds_dtc_app_load_from_nvm(void) {
+    if (s_dtc_storage.nvm_store == NULL) {
+        return false;
+    }
+    UdsDtcNvBlock block;
+    if (uds_param_load(s_dtc_storage.nvm_store, &block) != UDS_PARAM_OK) {
+        return false;
+    }
+    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+        for (uint8_t j = 0U; j < block.record_count; ++j) {
+            if (s_dtc_storage.records[i].dtc_number == block.records[j].dtc_number) {
+                s_dtc_storage.records[i].status_byte = block.records[j].status_byte;
+                s_dtc_storage.records[i].severity = block.records[j].severity;
+                s_dtc_storage.records[i].functional_unit = block.records[j].functional_unit;
+                s_dtc_storage.records[i].fault_counter = block.records[j].fault_counter;
+                s_dtc_storage.records[i].occurrence_counter = block.records[j].occurrence_counter;
+                s_dtc_storage.records[i].aging_counter = block.records[j].aging_counter;
+                s_dtc_storage.records[i].active = block.records[j].active;
+                break;
+            }
+        }
+    }
+    return true;
+}
+
 void uds_dtc_app_init(void) {
+    memset(&s_dtc_storage, 0, sizeof(s_dtc_storage));
     s_dtc_storage.status_availability_mask = 0xFFU;
     s_dtc_storage.record_count = 3U;
 
-    /* Initialize with realistic automotive DTCs */
-    /* DTC 1: P0100 - Mass Air Flow Sensor A Circuit (0x010000) */
+    /* Baseline DTC 1: P0100 - Mass Air Flow Sensor A Circuit (0x010000) */
     s_dtc_storage.records[0].dtc_number = 0x010000UL;
     s_dtc_storage.records[0].status_byte = 0x2FU; /* Confirmed, pending, test failed */
     s_dtc_storage.records[0].severity = 0x40U;    /* Check at next halt */
     s_dtc_storage.records[0].functional_unit = 0x01U;
     s_dtc_storage.records[0].fault_counter = 127;
+    s_dtc_storage.records[0].occurrence_counter = 5U;
+    s_dtc_storage.records[0].aging_counter = 0x28U;
     s_dtc_storage.records[0].snapshot_length = 4U;
     s_dtc_storage.records[0].snapshot_data[0] = 0x0CU; /* Engine RPM: 3072 */
     s_dtc_storage.records[0].snapshot_data[1] = 0x00U;
@@ -267,12 +367,14 @@ void uds_dtc_app_init(void) {
     s_dtc_storage.records[0].extended_data[1] = 0x28U; /* Aging counter */
     s_dtc_storage.records[0].active = true;
 
-    /* DTC 2: U0100 - Lost Communication with ECM/PCM (0xC10000) */
+    /* Baseline DTC 2: U0100 - Lost Communication with ECM/PCM (0xC10000) */
     s_dtc_storage.records[1].dtc_number = 0xC10000UL;
     s_dtc_storage.records[1].status_byte = 0x08U; /* Confirmed */
     s_dtc_storage.records[1].severity = 0x80U;    /* Immediate check */
     s_dtc_storage.records[1].functional_unit = 0x02U;
     s_dtc_storage.records[1].fault_counter = 50;
+    s_dtc_storage.records[1].occurrence_counter = 1U;
+    s_dtc_storage.records[1].aging_counter = 0x28U;
     s_dtc_storage.records[1].snapshot_length = 2U;
     s_dtc_storage.records[1].snapshot_data[0] = 0x00U;
     s_dtc_storage.records[1].snapshot_data[1] = 0x00U;
@@ -281,12 +383,14 @@ void uds_dtc_app_init(void) {
     s_dtc_storage.records[1].extended_data[1] = 0x28U;
     s_dtc_storage.records[1].active = true;
 
-    /* DTC 3: B0001 - Driver Airbag Deployment Loop (0x800100) */
+    /* Baseline DTC 3: B0001 - Driver Airbag Deployment Loop (0x800100) */
     s_dtc_storage.records[2].dtc_number = 0x800100UL;
     s_dtc_storage.records[2].status_byte = 0x01U; /* Test failed */
     s_dtc_storage.records[2].severity = 0xA0U;    /* Maintenance immediately */
     s_dtc_storage.records[2].functional_unit = 0x03U;
     s_dtc_storage.records[2].fault_counter = 10;
+    s_dtc_storage.records[2].occurrence_counter = 2U;
+    s_dtc_storage.records[2].aging_counter = 0x28U;
     s_dtc_storage.records[2].snapshot_length = 2U;
     s_dtc_storage.records[2].snapshot_data[0] = 0x12U;
     s_dtc_storage.records[2].snapshot_data[1] = 0x34U;
@@ -313,6 +417,7 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
             s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
             s_dtc_storage.records[i].fault_counter = 0;
         }
+        (void)uds_dtc_app_save_to_nvm();
         return UDS_RESULT_OK;
     }
     for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
@@ -320,6 +425,7 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
             s_dtc_storage.records[i].active = false;
             s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
             s_dtc_storage.records[i].fault_counter = 0;
+            (void)uds_dtc_app_save_to_nvm();
             return UDS_RESULT_OK;
         }
     }
@@ -333,6 +439,13 @@ bool uds_dtc_app_set_fault(uint32_t dtc, uint8_t status, uint8_t severity, int8_
             s_dtc_storage.records[i].status_byte = status;
             s_dtc_storage.records[i].severity = severity;
             s_dtc_storage.records[i].fault_counter = counter;
+            if ((status & UDS_DTC_STATUS_TEST_FAILED) != 0U) {
+                if (s_dtc_storage.records[i].occurrence_counter < 255U) {
+                    s_dtc_storage.records[i].occurrence_counter++;
+                }
+                s_dtc_storage.records[i].aging_counter = 0U;
+            }
+            (void)uds_dtc_app_save_to_nvm();
             return true;
         }
     }
@@ -345,7 +458,11 @@ bool uds_dtc_app_set_fault(uint32_t dtc, uint8_t status, uint8_t severity, int8_
         s_dtc_storage.records[idx].functional_unit = 0x01U;
         s_dtc_storage.records[idx].snapshot_length = 0U;
         s_dtc_storage.records[idx].extended_length = 0U;
+        s_dtc_storage.records[idx].occurrence_counter =
+            ((status & UDS_DTC_STATUS_TEST_FAILED) != 0U) ? 1U : 0U;
+        s_dtc_storage.records[idx].aging_counter = 0U;
         s_dtc_storage.records[idx].active = true;
+        (void)uds_dtc_app_save_to_nvm();
         return true;
     }
     return false;
@@ -356,6 +473,7 @@ bool uds_dtc_app_clear_fault(uint32_t dtc) {
         if (s_dtc_storage.records[i].dtc_number == dtc) {
             s_dtc_storage.records[i].active = false;
             s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
+            (void)uds_dtc_app_save_to_nvm();
             return true;
         }
     }
@@ -384,6 +502,10 @@ bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
                     rec->active = true;
                     rec->status_byte |= failed_mask;
                     rec->status_byte &= (uint8_t)~completed_mask;
+                    if (rec->occurrence_counter < 255U) {
+                        rec->occurrence_counter++;
+                    }
+                    rec->aging_counter = 0U;
                 }
             } else {
                 if (rec->fault_counter >= (-128 + 16)) {
@@ -397,8 +519,12 @@ bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
                     rec->fault_counter = -128;
                     rec->status_byte &= (uint8_t)~UDS_DTC_STATUS_TEST_FAILED;
                     rec->status_byte &= (uint8_t)~completed_mask;
+                    if (rec->aging_counter < 255U) {
+                        rec->aging_counter++;
+                    }
                 }
             }
+            (void)uds_dtc_app_save_to_nvm();
             return true;
         }
     }

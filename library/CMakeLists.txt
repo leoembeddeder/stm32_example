@@ -30,7 +30,8 @@ add_library(uds_iso_tp_uds STATIC
     src/uds_did.c
     src/uds_download.c
     src/uds_dtc.c
-    src/uds_services.c)
+    src/uds_services.c
+    src/uds_wear_leveling.c)
 target_include_directories(uds_iso_tp_uds PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
@@ -45,7 +46,8 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
         src/uds_did.c
         src/uds_download.c
         src/uds_dtc.c
-        src/uds_services.c)
+        src/uds_services.c
+        src/uds_wear_leveling.c)
     target_include_directories(uds_iso_tp_c99_portability PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
@@ -117,6 +119,19 @@ if(UDS_ISO_TP_BUILD_TESTS)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_bootloader_dtc_contract
              COMMAND uds_iso_tp_bootloader_dtc_test)
+
+    add_executable(uds_iso_tp_wear_leveling_test
+        tests/uds/test_wear_leveling.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_dtc_app.c)
+    target_include_directories(uds_iso_tp_wear_leveling_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
+    target_link_libraries(uds_iso_tp_wear_leveling_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_wear_leveling_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_wear_leveling_contract
+             COMMAND uds_iso_tp_wear_leveling_test)
 endif()
 
 if(UDS_ISO_TP_BUILD_EXAMPLES)
