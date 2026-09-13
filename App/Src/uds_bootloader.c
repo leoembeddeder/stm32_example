@@ -1,6 +1,8 @@
 #include "uds_bootloader.h"
 
+#if defined(USE_HAL_DRIVER) || defined(STM32F767xx)
 #include "main.h"
+#endif
 #include <string.h>
 
 /* Lightweight standalone SHA-256 implementation */
@@ -158,9 +160,10 @@ static UdsDownloadResult bootloader_flash_program(void *context, uint32_t addres
     (void)context;
 #if defined(HAL_FLASH_MODULE_ENABLED)
     HAL_FLASH_Unlock();
-    for (uint16_t i = 0U; i < length; i += 4U) {
+    for (uint32_t i = 0U; i < (uint32_t)length; i += 4U) {
         uint32_t word = 0xFFFFFFFFUL;
-        (void)memcpy(&word, &data[i], ((uint16_t)(length - i) < 4U) ? (size_t)(length - i) : 4U);
+        size_t chunk_len = ((uint32_t)length - i < 4U) ? (size_t)((uint32_t)length - i) : 4U;
+        (void)memcpy(&word, &data[i], chunk_len);
         if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address + i, (uint64_t)word) != HAL_OK) {
             HAL_FLASH_Lock();
             return UDS_DOWNLOAD_PROGRAM_ERROR;
@@ -311,7 +314,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         /* Routine 0xFF00: Erase Slot B */
         UdsDownloadResult res =
             bootloader_flash_erase_start(NULL, UDS_BL_APP_SLOT_B_START, UDS_BL_APP_SLOT_B_SIZE);
-        out[0] = (res == UDS_DOWNLOAD_OK) ? 0x00U : 0x01U; /* 0x00 = success */
+        out[0] = (uint8_t)((res == UDS_DOWNLOAD_OK) ? 0x00U : 0x01U); /* 0x00 = success */
         *out_len = 1U;
         return (res == UDS_DOWNLOAD_OK) ? UDS_RESULT_OK : UDS_RESULT_ERROR;
     }
@@ -354,7 +357,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         sha256_final(&sha, computed_hash);
 
         /* 4. Match hash digest */
-        if (memcmp(computed_hash, meta->sha256, 32) != 0) {
+        if (memcmp(computed_hash, meta->sha256, sizeof(computed_hash)) != 0) {
             out[0] = 0x03U; /* Digest mismatch */
             *out_len = 1U;
             return UDS_RESULT_ERROR;
@@ -376,8 +379,9 @@ typedef void (*AppEntryFn)(void);
 /* Cortex-M7 Vector Jump & Cache Flush */
 void uds_bootloader_jump_to_app(uint32_t app_vector_addr) {
 #if defined(CORTEX_M7) || defined(STM32F767xx)
-    uint32_t app_msp = *(__IO uint32_t *)app_vector_addr;
-    AppEntryFn app_entry = (AppEntryFn)(*(__IO uint32_t *)(app_vector_addr + 4U));
+    uint32_t app_msp = *(__IO uint32_t *)(uintptr_t)app_vector_addr;
+    AppEntryFn app_entry =
+        (AppEntryFn)(uintptr_t)(*(__IO uint32_t *)(uintptr_t)(app_vector_addr + 4U));
 
     /* 1. Disable all interrupts */
     __disable_irq();
@@ -388,7 +392,7 @@ void uds_bootloader_jump_to_app(uint32_t app_vector_addr) {
     SysTick->VAL = 0U;
 
     /* 3. Disable all peripherals & clear NVIC pending interrupts */
-    for (uint8_t i = 0U; i < 8U; i++) {
+    for (uint32_t i = 0U; i < 8U; i++) {
         NVIC->ICER[i] = 0xFFFFFFFFUL;
         NVIC->ICPR[i] = 0xFFFFFFFFUL;
     }

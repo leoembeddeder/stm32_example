@@ -23,7 +23,7 @@ static bool dtc_matches_request(const UdsDtcAppRecord *rec, const uint8_t *req, 
     if (req_len < 5U) {
         return true;
     }
-    uint32_t target_dtc = ((uint32_t)req[2] << 16U) | ((uint32_t)req[3] << 8U) | req[4];
+    uint32_t target_dtc = ((uint32_t)req[2] << 16U) | ((uint32_t)req[3] << 8U) | (uint32_t)req[4];
     return (target_dtc == 0xFFFFFFUL) || (target_dtc == rec->dtc_number);
 }
 

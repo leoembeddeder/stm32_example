@@ -26,7 +26,7 @@ static void test_dtc_app_all_subfunctions(void) {
     assert(response[0] == 0x01U);
     assert(response[1] == 0xFFU); /* Availability mask */
     assert(response[2] == 0x01U); /* Format ISO 14229-1 */
-    uint16_t count = ((uint16_t)response[3] << 8U) | response[4];
+    uint16_t count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
     assert(count == 3U);
 
     /* 2. Subfunction 0x02: reportDTCByStatusMask */
@@ -70,14 +70,14 @@ static void test_dtc_app_all_subfunctions(void) {
     /* Verify count is now 0 */
     assert(backend->report(NULL, 0x01U, req_01, sizeof(req_01), response, &resp_len,
                            sizeof(response)) == UDS_RESULT_OK);
-    uint16_t cleared_count = ((uint16_t)response[3] << 8U) | response[4];
+    uint16_t cleared_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
     assert(cleared_count == 0U);
 
     /* 8. Add a new fault dynamically at runtime */
     assert(uds_dtc_app_set_fault(0x020000UL, 0x24U, 0x20U, 15));
     assert(backend->report(NULL, 0x01U, req_01, sizeof(req_01), response, &resp_len,
                            sizeof(response)) == UDS_RESULT_OK);
-    uint16_t updated_count = ((uint16_t)response[3] << 8U) | response[4];
+    uint16_t updated_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
     assert(updated_count == 1U);
 }
 
@@ -142,7 +142,7 @@ static void test_bootloader_flow(void) {
                                       0x9aU, 0xfbU, 0xf4U, 0xc8U, 0x99U, 0x6fU, 0xb9U, 0x24U,
                                       0x27U, 0xaeU, 0x41U, 0xe4U, 0x64U, 0x9bU, 0x93U, 0x4cU,
                                       0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
-    (void)memcpy(meta.sha256, empty_sha256, 32);
+    (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
 
     assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
                                           (const uint8_t *)&meta, sizeof(meta), routine_out,
