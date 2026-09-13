@@ -14,18 +14,18 @@ uint16_t uds_crc16_ccitt_update(uint16_t crc, const void *data, size_t len) {
         return crc;
     }
     const uint8_t *ptr = (const uint8_t *)data;
-    uint16_t val = crc;
+    uint32_t val = (uint32_t)crc;
     for (size_t i = 0U; i < len; ++i) {
-        val ^= (uint16_t)((uint16_t)ptr[i] << 8U);
+        val ^= ((uint32_t)ptr[i] << 8U);
         for (uint8_t bit = 0U; bit < 8U; ++bit) {
             if ((val & 0x8000U) != 0U) {
-                val = (uint16_t)((val << 1U) ^ UDS_CRC16_CCITT_POLY);
+                val = ((val << 1U) ^ (uint32_t)UDS_CRC16_CCITT_POLY) & 0xFFFFU;
             } else {
-                val = (uint16_t)(val << 1U);
+                val = (val << 1U) & 0xFFFFU;
             }
         }
     }
-    return val;
+    return (uint16_t)(val & 0xFFFFU);
 }
 
 uint16_t uds_crc16_ccitt(const void *data, size_t len) {
@@ -33,7 +33,7 @@ uint16_t uds_crc16_ccitt(const void *data, size_t len) {
 }
 
 static uint16_t align16(uint16_t size) {
-    return (uint16_t)((size + 15U) & (uint16_t)~15U);
+    return (uint16_t)(((uint32_t)size + 15U) & ~(uint32_t)15U);
 }
 
 static uint32_t slot_addr(const UdsParamStore *store, uint8_t sector, uint16_t slot) {
@@ -210,7 +210,7 @@ int uds_param_save(UdsParamStore *store, const void *data) {
 
     store->active_sector = sec;
     store->active_slot = sl;
-    store->next_seq++;
+    store->next_seq = (uint16_t)(store->next_seq + 1U);
     store->has_active_slot = true;
 
     return UDS_PARAM_OK;
