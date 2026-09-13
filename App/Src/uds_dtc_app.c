@@ -374,14 +374,16 @@ bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
                     rec->fault_counter = 127;
                 }
                 if (rec->fault_counter >= 127) {
-                    rec->fault_counter = 127;
-                    rec->active = true;
-                    rec->status_byte |=
+                    uint8_t failed_mask =
                         (uint8_t)(UDS_DTC_STATUS_TEST_FAILED |
                                   UDS_DTC_STATUS_TEST_FAILED_THIS_CYCLE | UDS_DTC_STATUS_PENDING |
                                   UDS_DTC_STATUS_CONFIRMED | UDS_DTC_STATUS_TEST_FAILED_SLC);
-                    rec->status_byte &= (uint8_t)~(UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC |
-                                                   UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
+                    uint8_t completed_mask = (uint8_t)(UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC |
+                                                       UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
+                    rec->fault_counter = 127;
+                    rec->active = true;
+                    rec->status_byte |= failed_mask;
+                    rec->status_byte &= (uint8_t)~completed_mask;
                 }
             } else {
                 if (rec->fault_counter >= (-128 + 16)) {
@@ -390,10 +392,11 @@ bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
                     rec->fault_counter = -128;
                 }
                 if (rec->fault_counter <= -128) {
+                    uint8_t completed_mask = (uint8_t)(UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC |
+                                                       UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
                     rec->fault_counter = -128;
                     rec->status_byte &= (uint8_t)~UDS_DTC_STATUS_TEST_FAILED;
-                    rec->status_byte &= (uint8_t)~(UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC |
-                                                   UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
+                    rec->status_byte &= (uint8_t)~completed_mask;
                 }
             }
             return true;
