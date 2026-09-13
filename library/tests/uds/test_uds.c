@@ -259,12 +259,20 @@ static UdsCallbackResult mock_clear_dtc(void *context, uint32_t group) {
     return UDS_RESULT_OK;
 }
 
+static uint8_t s_mock_dtc_setting_subfunction = 0U;
+static UdsCallbackResult mock_control_dtc_setting(void *context, uint8_t subfunction) {
+    (void)context;
+    s_mock_dtc_setting_subfunction = subfunction;
+    return UDS_RESULT_OK;
+}
+
 static void test_addressed_dispatch(void) {
     UdsCallbacks callbacks = {.read_did = read_did,
                               .security_seed = security_seed,
                               .security_key = security_key,
                               .ecu_reset = mock_ecu_reset,
-                              .clear_dtc = mock_clear_dtc};
+                              .clear_dtc = mock_clear_dtc,
+                              .control_dtc_setting = mock_control_dtc_setting};
     UdsServer server;
     uds_server_init(&server, &callbacks, NULL, 0U);
     uint8_t response[64];

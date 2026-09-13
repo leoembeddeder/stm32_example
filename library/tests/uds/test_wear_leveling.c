@@ -165,10 +165,54 @@ static void test_power_loss_recovery(void) {
     assert(recovered.sensor_val == 0xAAAAU);
 }
 
+#define DTC_SECTOR_SIZE 2048U
+#define DTC_SECTOR_COUNT 2U
+static uint8_t s_dtc_flash[DTC_SECTOR_SIZE * DTC_SECTOR_COUNT];
+
+static int dtc_flash_erase(uint32_t addr) {
+    uint32_t sec = addr / DTC_SECTOR_SIZE;
+    if (sec >= DTC_SECTOR_COUNT) {
+        return -1;
+    }
+    memset(&s_dtc_flash[sec * DTC_SECTOR_SIZE], 0xFF, DTC_SECTOR_SIZE);
+    return 0;
+}
+
+static int dtc_flash_read(uint32_t addr, void *buf, size_t len) {
+    if ((addr + len) > sizeof(s_dtc_flash)) {
+        return -1;
+    }
+    memcpy(buf, &s_dtc_flash[addr], len);
+    return 0;
+}
+
+static int dtc_flash_write(uint32_t addr, const void *buf, size_t len) {
+    if ((addr + len) > sizeof(s_dtc_flash)) {
+        return -1;
+    }
+    const uint8_t *src = (const uint8_t *)buf;
+    for (size_t i = 0U; i < len; ++i) {
+        s_dtc_flash[addr + i] &= src[i];
+    }
+    return 0;
+}
+
+static uint32_t dtc_flash_sector_size(uint32_t addr) {
+    (void)addr;
+    return DTC_SECTOR_SIZE;
+}
+
+static const UdsFlashPort s_dtc_flash_port = {
+    .erase = dtc_flash_erase,
+    .read = dtc_flash_read,
+    .write = dtc_flash_write,
+    .sector_size = dtc_flash_sector_size,
+};
+
 static void test_dtc_persistence_integration(void) {
-    memset(s_ram_flash, 0xFF, sizeof(s_ram_flash));
+    memset(s_dtc_flash, 0xFF, sizeof(s_dtc_flash));
     UdsParamStore dtc_nvm;
-    assert(uds_param_init(&dtc_nvm, &s_test_flash_port, 0U, TEST_SECTOR_COUNT,
+    assert(uds_param_init(&dtc_nvm, &s_dtc_flash_port, 0U, DTC_SECTOR_COUNT,
                           sizeof(UdsDtcNvBlock)) == UDS_PARAM_OK);
 
     uds_dtc_app_init();
