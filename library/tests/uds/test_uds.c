@@ -87,6 +87,9 @@ static UdsCallbackResult routine_control(void *context, uint8_t subfunction, uin
                                          uint16_t capacity) {
     (void)context;
     (void)request;
+    if (routine_id == 0xFF00U) {
+        return UDS_RESULT_RESPONSE_PENDING;
+    }
     if ((subfunction != 1U) || (routine_id != 0x0203U) || (request_len != 1U) || (capacity < 1U)) {
         return UDS_RESULT_OUT_OF_RANGE;
     }
@@ -462,6 +465,12 @@ static void test_uds(void) {
                                     0x03U, 0xAAU};
     assert(uds_server_handle(&server, routine_suppressed, sizeof(routine_suppressed), response,
                              &response_len, sizeof(response), 10005U) == UDS_RESULT_NO_RESPONSE);
+
+    uint8_t routine_pending[] = {0x31U, 0x01U, 0xFFU, 0x00U};
+    assert(uds_server_handle(&server, routine_pending, sizeof(routine_pending), response,
+                             &response_len, sizeof(response), 10007U) == UDS_RESULT_OK);
+    assert(response_len == 3U && response[0] == 0x7FU && response[1] == 0x31U &&
+           response[2] == UDS_NRC_REQUEST_CORRECTLY_RECEIVED_RESPONSE_PENDING);
 
     uint8_t dtc_sprmib[] = {0x19U, 0x82U, 0xFFU};
     assert(uds_server_handle(&server, dtc_sprmib, sizeof(dtc_sprmib), response, &response_len,

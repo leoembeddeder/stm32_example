@@ -276,6 +276,8 @@ static uint8_t result_to_nrc(UdsCallbackResult result) {
         return UDS_NRC_GENERAL_PROGRAMMING_FAILURE;
     case UDS_RESULT_RESPONSE_TOO_LONG:
         return UDS_NRC_RESPONSE_TOO_LONG;
+    case UDS_RESULT_RESPONSE_PENDING:
+        return UDS_NRC_REQUEST_CORRECTLY_RECEIVED_RESPONSE_PENDING;
     case UDS_RESULT_OK:
     case UDS_RESULT_NO_RESPONSE:
     case UDS_RESULT_ERROR:

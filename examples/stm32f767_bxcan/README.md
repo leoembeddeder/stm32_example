@@ -8,4 +8,7 @@ The maintained STM32F767 transport does not contain a duplicate `tx_pending` boo
 
 For ECUReset (`11 01`), the endpoint produces `51 01`, submits the frame through this thin adapter, and applies the configured completion contract. The F767 application may use the mailbox polling callback for deferred completion; the generic endpoint, not bxCAN `tx_pending`, owns the exactly-once reset transition.
 
-This directory intentionally contains no vendor-generated clocks, filters, GPIO, NVIC, linker script, or transceiver configuration. The F767 path is a real Classical-CAN example, not a CAN-FD claim.
+This directory provides reference dual-bank linker scripts aligning with `uds_bootloader.h`:
+- `STM32F767ZI_Bootloader.ld`: 256 KB Flash (0x08000000 - 0x0803FFFF), 512 KB RAM (0x20000000).
+- `STM32F767ZI_App_SlotA.ld`: 768 KB Flash (0x08040000 - 0x080FFFFF), 512 KB RAM (0x20000000).
+It intentionally contains no vendor-generated clocks, filters, GPIO, NVIC, or transceiver configuration. The F767 path is a real Classical-CAN example, not a CAN-FD claim.
