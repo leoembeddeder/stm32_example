@@ -81,22 +81,36 @@ static void test_multi_did_operations(void) {
     assert(response[4] == 0xF1U && response[5] == 0x90U);
     assert(memcmp(&response[6], "stm32f767-uds-vin", 17) == 0);
 
-    /* 4. Write to writable DID: 0xF190 VIN */
+    /* 4. Write to writable DID: 0xF190 VIN - rejected in Default Session per ISO 14229-1 */
     uint8_t req_write_vin[] = {0x2EU, 0xF1U, 0x90U, 'M', 'Y', 'N', 'E', 'W', 'V', 'I',
                                'N',   '1',   '2',   '3', '4', '5', '6', '7', '8', '9'};
     assert(uds_server_handle(&server, req_write_vin, sizeof(req_write_vin), response, &resp_len,
                              sizeof(response), 1000U) == UDS_RESULT_OK);
+    assert(response[0] == 0x7FU && response[1] == 0x2EU &&
+           response[2] == UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+
+    /* Switch to Extended Session (0x10 0x03) to allow WriteDataByIdentifier (0x2E) */
+    uint8_t req_ext_session[] = {0x10U, 0x03U};
+    assert(uds_server_handle(&server, req_ext_session, sizeof(req_ext_session), response, &resp_len,
+                             sizeof(response), 1001U) == UDS_RESULT_OK);
+    assert(response[0] == 0x50U && response[1] == 0x03U);
+    uds_did_app_set_active_session(0x03U);
+
+    /* Write to writable DID in Extended Session succeeds */
+    assert(uds_server_handle(&server, req_write_vin, sizeof(req_write_vin), response, &resp_len,
+                             sizeof(response), 1002U) == UDS_RESULT_OK);
     assert(response[0] == 0x6EU && response[1] == 0xF1U && response[2] == 0x90U);
 
-    /* Verify updated VIN via read */
+    /* Verify updated VIN and updated active session (0x03) via multi-read */
     assert(uds_server_handle(&server, req_multi, sizeof(req_multi), response, &resp_len,
-                             sizeof(response), 1000U) == UDS_RESULT_OK);
+                             sizeof(response), 1003U) == UDS_RESULT_OK);
+    assert(response[3] == 0x03U); /* Active session is now 0x03 Extended */
     assert(memcmp(&response[6], "MYNEWVIN123456789", 17) == 0);
 
     /* 5. Attempt write to read-only DID: 0xF181 must be rejected */
     uint8_t req_write_ro[] = {0x2EU, 0xF1U, 0x81U, 0xAAU, 0xBBU};
     assert(uds_server_handle(&server, req_write_ro, sizeof(req_write_ro), response, &resp_len,
-                             sizeof(response), 1000U) == UDS_RESULT_OK);
+                             sizeof(response), 1004U) == UDS_RESULT_OK);
     assert(response[0] == 0x7FU && response[1] == 0x2EU &&
            response[2] == UDS_NRC_CONDITIONS_NOT_CORRECT);
 }
