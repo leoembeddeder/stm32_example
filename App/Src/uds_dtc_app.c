@@ -410,6 +410,8 @@ const UdsDtcBackend *uds_dtc_app_get_backend(void) {
 
 UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
     (void)context;
+    bool cleared_any = false;
+
     if (group_of_dtc == 0xFFFFFFUL) {
         /* Clear all DTCs - set to 0x50 per AUTOSAR Dem specification */
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
@@ -420,6 +422,39 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
         (void)uds_dtc_app_save_to_nvm();
         return UDS_RESULT_OK;
     }
+
+    /* Check standard ISO 14229-1 functional group masks */
+    uint32_t group_high = group_of_dtc & 0xFF0000UL;
+    bool is_group_mask =
+        ((group_of_dtc & 0x00FFFFUL) == 0x000000UL) || ((group_of_dtc & 0x00FFFFUL) == 0x00FF00UL);
+
+    if (is_group_mask) {
+        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+            uint32_t dtc = s_dtc_storage.records[i].dtc_number;
+            bool match = false;
+            if ((group_high == 0x000000UL) && (dtc < 0x400000UL)) {
+                match = true; /* Powertrain */
+            } else if ((group_high == 0x400000UL) && (dtc >= 0x400000UL) && (dtc < 0x800000UL)) {
+                match = true; /* Chassis */
+            } else if ((group_high == 0x800000UL) && (dtc >= 0x800000UL) && (dtc < 0xC00000UL)) {
+                match = true; /* Body */
+            } else if ((group_high == 0xC00000UL) && (dtc >= 0xC00000UL)) {
+                match = true; /* Network Communication */
+            }
+            if (match) {
+                s_dtc_storage.records[i].active = false;
+                s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
+                s_dtc_storage.records[i].fault_counter = 0;
+                cleared_any = true;
+            }
+        }
+        if (cleared_any) {
+            (void)uds_dtc_app_save_to_nvm();
+            return UDS_RESULT_OK;
+        }
+    }
+
+    /* Match individual DTC */
     for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
         if (s_dtc_storage.records[i].dtc_number == group_of_dtc) {
             s_dtc_storage.records[i].active = false;

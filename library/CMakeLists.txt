@@ -132,6 +132,22 @@ if(UDS_ISO_TP_BUILD_TESTS)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_wear_leveling_contract
              COMMAND uds_iso_tp_wear_leveling_test)
+
+    add_executable(uds_iso_tp_did_security_auth_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_did_security_auth_app.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_did_app.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_dtc_app.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_auth_app.c)
+    target_include_directories(uds_iso_tp_did_security_auth_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
+    target_link_libraries(uds_iso_tp_did_security_auth_test PRIVATE uds_iso_tp_uds uds_iso_tp_crypto)
+    target_compile_options(uds_iso_tp_did_security_auth_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_did_security_auth_contract
+             COMMAND uds_iso_tp_did_security_auth_test)
 endif()
 
 if(UDS_ISO_TP_BUILD_EXAMPLES)

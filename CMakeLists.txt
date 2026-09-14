@@ -17,6 +17,8 @@ add_subdirectory(cmake/stm32cubemx)
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/can_transport.c
     App/Src/uds_app.c
+    App/Src/uds_did_app.c
+    App/Src/uds_auth_app.c
     App/Src/uds_dtc_app.c
     App/Src/uds_bootloader.c
     App/Src/uds_platform.c
