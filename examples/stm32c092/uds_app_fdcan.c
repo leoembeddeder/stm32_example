@@ -20,8 +20,7 @@ void uds_c092_platform_reset_poll(void) {
 }
 
 #if defined(__GNUC__) || defined(__clang__)
-__attribute__((weak)) void uds_dtc_app_init(void) {
-}
+__attribute__((weak)) void uds_dtc_app_init(void) {}
 __attribute__((weak)) const UdsDtcBackend *uds_dtc_app_get_backend(void) {
     return NULL;
 }
