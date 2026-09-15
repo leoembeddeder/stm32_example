@@ -84,8 +84,8 @@ static const UdsServiceAttribute service_attributes[] = {
      UDS_ADDRESS_PHYSICAL},
     {0x2EU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING | UDS_SESSION_MASK_EXTENDED,
      UDS_SECURITY_MASK_NONE, UDS_ADDRESS_PHYSICAL},
-    {0x3DU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
-     UDS_ADDRESS_PHYSICAL},
+    {0x3DU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING | UDS_SESSION_MASK_EXTENDED,
+     UDS_SECURITY_MASK_NONE, UDS_ADDRESS_PHYSICAL},
     {0x14U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
      UDS_ADDRESS_MODE_BOTH},
     {0x35U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
@@ -278,6 +278,10 @@ static uint8_t result_to_nrc(UdsCallbackResult result) {
         return UDS_NRC_RESPONSE_TOO_LONG;
     case UDS_RESULT_RESPONSE_PENDING:
         return UDS_NRC_REQUEST_CORRECTLY_RECEIVED_RESPONSE_PENDING;
+    case UDS_RESULT_INVALID_FORMAT:
+        return UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT;
+    case UDS_RESULT_SECURITY_DENIED:
+        return UDS_NRC_SECURITY_ACCESS_DENIED;
     case UDS_RESULT_OK:
     case UDS_RESULT_NO_RESPONSE:
     case UDS_RESULT_ERROR:
@@ -1368,4 +1372,8 @@ uint8_t uds_server_security_failed_attempts(const UdsServer *server) {
 
 bool uds_server_security_seed_valid(const UdsServer *server) {
     return (server != NULL) && server->security_seed_valid;
+}
+
+const UdsServer *uds_server_get_current(void) {
+    return s_current_server;
 }

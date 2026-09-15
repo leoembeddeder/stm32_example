@@ -21,12 +21,14 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/uds_auth_app.c
     App/Src/uds_dtc_app.c
     App/Src/uds_bootloader.c
+    App/Src/uds_memory_app.c
     App/Src/uds_platform.c
     library/src/isotp.c
     library/src/uds.c
     library/src/uds_did.c
     library/src/uds_download.c
     library/src/uds_dtc.c
+    library/src/uds_memory.c
     library/src/uds_services.c
     library/src/endpoint.c
     library/src/uds_wear_leveling.c

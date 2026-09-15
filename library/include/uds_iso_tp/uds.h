@@ -199,6 +199,8 @@ typedef enum {
     UDS_RESULT_PROGRAMMING_FAILURE,
     UDS_RESULT_RESPONSE_TOO_LONG,
     UDS_RESULT_RESPONSE_PENDING,
+    UDS_RESULT_INVALID_FORMAT,
+    UDS_RESULT_SECURITY_DENIED,
     UDS_RESULT_ERROR
 } UdsCallbackResult;
 
@@ -322,5 +324,6 @@ bool uds_server_security_seed_valid(const UdsServer *server);
 void uds_server_set_timing(UdsServer *server, uint32_t s3_timeout_ms,
                            uint32_t security_initial_delay_ms, uint32_t security_lockout_ms,
                            uint32_t security_seed_timeout_ms, uint8_t security_max_attempts);
+const UdsServer *uds_server_get_current(void);
 
 #endif

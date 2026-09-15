@@ -5,6 +5,7 @@
 #include "uds_bootloader.h"
 #include "uds_did_app.h"
 #include "uds_dtc_app.h"
+#include "uds_memory_app.h"
 #include "uds_iso_tp/endpoint.h"
 #include "uds_iso_tp/uds.h"
 #include "uds_iso_tp/uds_services.h"
@@ -95,9 +96,11 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     uds_dtc_app_init();
     uds_bootloader_init();
     uds_auth_app_init();
+    uds_memory_app_init();
 
     (void)memset(&s_service_backends, 0, sizeof(s_service_backends));
     s_service_backends.authentication = uds_auth_app_get_backend();
+    s_service_backends.memory = uds_memory_app_get_backend();
 
     UdsIsoTpEndpointConfig config = {0};
     isotp_config_classic_can(&config.isotp_config);

@@ -30,6 +30,7 @@ add_library(uds_iso_tp_uds STATIC
     src/uds_did.c
     src/uds_download.c
     src/uds_dtc.c
+    src/uds_memory.c
     src/uds_services.c
     src/uds_wear_leveling.c)
 target_include_directories(uds_iso_tp_uds PUBLIC
@@ -46,6 +47,7 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
         src/uds_did.c
         src/uds_download.c
         src/uds_dtc.c
+        src/uds_memory.c
         src/uds_services.c
         src/uds_wear_leveling.c)
     target_include_directories(uds_iso_tp_c99_portability PRIVATE
@@ -161,6 +163,19 @@ if(UDS_ISO_TP_BUILD_TESTS)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_did_security_auth_contract
              COMMAND uds_iso_tp_did_security_auth_test)
+
+    add_executable(uds_iso_tp_memory_service_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_memory_service.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_memory_app.c)
+    target_include_directories(uds_iso_tp_memory_service_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
+    target_link_libraries(uds_iso_tp_memory_service_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_memory_service_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_memory_service_contract
+             COMMAND uds_iso_tp_memory_service_test)
 endif()
 
 if(UDS_ISO_TP_BUILD_EXAMPLES)
