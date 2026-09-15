@@ -47,34 +47,37 @@ bool uds_dtc_request_length_valid(uint8_t subfunction, uint16_t request_length) 
     case 0x01U:
     case 0x02U:
     case 0x05U:
-    case 0x07U:
-    case 0x08U:
-    case 0x0AU:
     case 0x0FU:
     case 0x11U:
     case 0x12U:
     case 0x13U:
-    case 0x15U:
-    case 0x17U:
     case 0x42U:
-    case 0x55U:
         return request_length == 3U;
-    case 0x04U:
-    case 0x06U:
-    case 0x09U:
-    case 0x10U:
-    case 0x14U:
-    case 0x19U:
-        return request_length == 5U;
-    case 0x16U:
-    case 0x18U:
-        return request_length == 4U;
+    case 0x03U:
     case 0x0BU:
     case 0x0CU:
     case 0x0DU:
     case 0x0EU:
-    case 0x03U:
+    case 0x14U:
         return request_length == 2U;
+    case 0x0AU:
+    case 0x15U:
+    case 0x55U:
+        return (request_length == 2U) || (request_length == 3U);
+    case 0x04U:
+    case 0x06U:
+    case 0x10U:
+        return (request_length == 5U) || (request_length == 6U);
+    case 0x07U:
+    case 0x08U:
+        return (request_length == 3U) || (request_length == 4U);
+    case 0x09U:
+        return request_length == 5U;
+    case 0x16U:
+    case 0x17U:
+    case 0x18U:
+    case 0x19U:
+        return (request_length >= 4U) && (request_length <= 7U);
     default:
         return false;
     }

@@ -14,9 +14,21 @@ static void test_dtc_app_all_subfunctions(void) {
     /* Check capabilities cover all subfunctions */
     assert((backend->capabilities & UDS_DTC_CAP_REPORT_NUMBER_BY_STATUS) != 0U);
     assert((backend->capabilities & UDS_DTC_CAP_REPORT_BY_STATUS_MASK) != 0U);
+    assert((backend->capabilities & UDS_DTC_CAP_REPORT_SUPPORTED_DTC) != 0U);
 
-    uint8_t response[256];
+    uint8_t response[512];
     uint16_t resp_len = 0U;
+
+    /* 0. Subfunction 0x0A: reportSupportedDTC (standard ISO 14229-1 2-byte request) */
+    uint8_t req_0a[] = {0x19U, 0x0AU};
+    assert(backend->report(NULL, 0x0AU, req_0a, sizeof(req_0a), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    /* 2-byte header (subfunction + status availability mask) + 69 DTCs * 4 bytes = 278 bytes */
+    assert(resp_len == (2U + 69U * 4U));
+    assert(response[0] == 0x0AU);
+    assert(response[1] == 0xFFU); /* Availability mask */
+    /* Verify first OEM DTC: U300614 (0xF00614) */
+    assert(response[2] == 0xF0U && response[3] == 0x06U && response[4] == 0x14U);
 
     /* 1. Subfunction 0x01: reportNumberOfDTCByStatusMask */
     uint8_t req_01[] = {0x19U, 0x01U, 0xFFU};
@@ -33,7 +45,7 @@ static void test_dtc_app_all_subfunctions(void) {
     uint8_t req_02[] = {0x19U, 0x02U, 0xFFU};
     assert(backend->report(NULL, 0x02U, req_02, sizeof(req_02), response, &resp_len,
                            sizeof(response)) == UDS_RESULT_OK);
-    assert(resp_len == (2U + 3U * 4U)); /* 2-byte header + 3 DTCs * 4 bytes */
+    assert(resp_len == (2U + 3U * 4U)); /* 2-byte header + 3 active DTCs * 4 bytes */
     assert(response[0] == 0x02U);
 
     /* 3. Subfunction 0x03: reportDTCSnapshotIdentification */
@@ -51,6 +63,17 @@ static void test_dtc_app_all_subfunctions(void) {
     assert(response[1] == 0x01U); /* DTC high */
     assert(response[2] == 0x00U);
     assert(response[3] == 0x00U);
+
+    /* 4b. Subfunction 0x04 with 6 bytes and record 0x00 on OEM DTC C100616 (0xD00616) */
+    assert(uds_dtc_app_set_fault(0xD00616UL, 0x08U, 0x80U, 10));
+    uint8_t req_04_oem[] = {0x19U, 0x04U, 0xD0U, 0x06U, 0x16U, 0x00U};
+    assert(backend->report(NULL, 0x04U, req_04_oem, sizeof(req_04_oem), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(response[0] == 0x04U);
+    assert(response[1] == 0xD0U);
+    assert(response[2] == 0x06U);
+    assert(response[3] == 0x16U);
+    assert(response[5] == 0x00U); /* Echoes record 0x00 */
 
     /* 5. Subfunction 0x05: reportDTCSnapshotRecordByRecordNumber */
     uint8_t req_05[] = {0x19U, 0x05U, 0x01U};

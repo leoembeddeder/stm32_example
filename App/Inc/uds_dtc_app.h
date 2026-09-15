@@ -12,7 +12,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define UDS_DTC_APP_MAX_RECORDS 16U
+#define UDS_DTC_APP_MAX_RECORDS 80U
+#define UDS_DTC_OEM_COUNT 66U
 #define UDS_DTC_APP_SNAPSHOT_SIZE 16U
 #define UDS_DTC_APP_EXTENDED_SIZE 8U
 

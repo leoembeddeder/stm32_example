@@ -49,6 +49,13 @@ int main(void) {
 
     assert(uds_dtc_request_length_valid(0x01U, 3U));
     assert(uds_dtc_request_length_valid(0x04U, 5U));
+    assert(uds_dtc_request_length_valid(0x04U, 6U));
+    assert(uds_dtc_request_length_valid(0x06U, 5U));
+    assert(uds_dtc_request_length_valid(0x06U, 6U));
+    assert(uds_dtc_request_length_valid(0x0AU, 2U));
+    assert(uds_dtc_request_length_valid(0x0AU, 3U));
+    assert(uds_dtc_request_length_valid(0x14U, 2U));
+    assert(uds_dtc_request_length_valid(0x15U, 2U));
     assert(uds_dtc_request_length_valid(0x16U, 4U));
     assert(uds_dtc_request_length_valid(0x0BU, 2U));
     assert(!uds_dtc_request_length_valid(0x01U, 2U));
@@ -141,6 +148,11 @@ int main(void) {
     assert(response[0] == 0x59U && response[1] == 0x04U && response[2] == 0x01U &&
            response[3] == 0x02U && response[4] == 0x03U && response[5] == 0x01U &&
            response[6] == 0x01U && response[7] == 0x04U && response[8] == 0xA1U);
+
+    const uint8_t snapshot_record_6byte[] = {0x19U, 0x04U, 0x01U, 0x02U, 0x03U, 0x01U};
+    assert(uds_server_handle(&fixture_server, snapshot_record_6byte, sizeof(snapshot_record_6byte),
+                             response, &response_length, sizeof(response), 3U) == UDS_RESULT_OK);
+    assert(response[0] == 0x59U && response[1] == 0x04U && response[2] == 0x01U);
 
     const uint8_t extended_record[] = {0x19U, 0x06U, 0x01U, 0x02U, 0x03U};
     assert(uds_server_handle(&fixture_server, extended_record, sizeof(extended_record), response,

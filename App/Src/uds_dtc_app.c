@@ -133,8 +133,10 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
             if (rec->active && dtc_matches_request(rec, request, request_length)) {
                 found = true;
+                uint8_t record_num =
+                    (request_length >= 6U && request[5] != 0xFFU) ? request[5] : 0x01U;
                 if (!append_dtc(response, &len, response_capacity, rec) ||
-                    !append_byte(response, &len, response_capacity, 0x01U /* Record #1 */)) {
+                    !append_byte(response, &len, response_capacity, record_num)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
 
@@ -344,60 +346,152 @@ bool uds_dtc_app_load_from_nvm(void) {
     return true;
 }
 
+typedef struct {
+    uint32_t dtc_number;
+    uint8_t severity;
+    uint8_t functional_unit;
+} UdsOemDtcDef;
+
+static const UdsOemDtcDef s_oem_dtc_defs[UDS_DTC_OEM_COUNT] = {
+    {0xF00614UL, 0x80U, 0x01U}, /* U300614 ASW_DTC_BatteryVoltHighWarn */
+    {0xF00615UL, 0xA0U, 0x01U}, /* U300615 ASW_DTC_BatteryVoltLowWarn */
+    {0xD00616UL, 0x80U, 0x01U}, /* C100616 ASW_DTC_BatteryVoltHigh */
+    {0xD00617UL, 0xA0U, 0x01U}, /* C100617 ASW_DTC_BatteryVoltLow */
+    {0xD00618UL, 0x80U, 0x01U}, /* C100618 ASW_DTC_CanBusOff */
+    {0xD00619UL, 0xA0U, 0x01U}, /* C100619 ASW_DTC_SysPrs_SigLost */
+    {0xD00620UL, 0x80U, 0x01U}, /* C100620 ASW_DTC_SysPrs_OverLimit */
+    {0xD00621UL, 0xA0U, 0x01U}, /* C100621 ASW_DTC_SysPrs_JumpErr */
+    {0xD00622UL, 0x80U, 0x01U}, /* C100622 ASW_DTC_AccuPrs_SigLost */
+    {0xD00623UL, 0xA0U, 0x01U}, /* C100623 ASW_DTC_AccuPrs_OverLimit */
+    {0xD00624UL, 0x80U, 0x01U}, /* C100624 ASW_DTC_AccuPrs_JumpErr */
+    {0xD00625UL, 0xA0U, 0x01U}, /* C100625 ASW_DTC_PfsPrs_SigLost */
+    {0xD00626UL, 0x80U, 0x01U}, /* C100626 ASW_DTC_PfsPrs_OverLimit */
+    {0xD00627UL, 0xA0U, 0x01U}, /* C100627 ASW_DTC_PfsPrs_JumpErr */
+    {0xD00628UL, 0x80U, 0x01U}, /* C100628 ASW_DTC_PipeLineErrFL */
+    {0xD00629UL, 0xA0U, 0x01U}, /* C100629 ASW_DTC_PipeLineErrFR */
+    {0xD00630UL, 0x80U, 0x01U}, /* C100630 ASW_DTC_PipeLineErrRL */
+    {0xD00631UL, 0xA0U, 0x01U}, /* C100631 ASW_DTC_PipeLineErrRR */
+    {0xD00632UL, 0x80U, 0x01U}, /* C100632 ASW_DTC_WssFL_Err */
+    {0xD00633UL, 0xA0U, 0x01U}, /* C100633 ASW_DTC_WssFR_Err */
+    {0xD00634UL, 0x80U, 0x01U}, /* C100634 ASW_DTC_WssRL_Err */
+    {0xD00635UL, 0xA0U, 0x01U}, /* C100635 ASW_DTC_WssRR_Err */
+    {0xD00636UL, 0x80U, 0x01U}, /* C100636 ASW_DTC_AccuLowPrs_Err */
+    {0xD00637UL, 0xA0U, 0x01U}, /* C100637 ASW_DTC_AccuPrsHoldErr */
+    {0xD00638UL, 0x80U, 0x01U}, /* C100638 ASW_DTC_PconErr */
+    {0xD00639UL, 0xA0U, 0x01U}, /* C100639 ASW_DTC_AccuPump_DG */
+    {0xD00640UL, 0x80U, 0x01U}, /* C100640 ASW_DTC_PumpMotLockedRotFault */
+    {0xD00641UL, 0xA0U, 0x01U}, /* C100641 ASW_DTC_AccuPump_Err */
+    {0xD00642UL, 0x80U, 0x01U}, /* C100642 ASW_DTC_PTS_Err */
+    {0xD00643UL, 0xA0U, 0x01U}, /* C100643 ASW_DTC_PTS_Chanl_1Err */
+    {0xD00644UL, 0x80U, 0x01U}, /* C100644 ASW_DTC_PTS_Chanl_2Err */
+    {0xD00645UL, 0xA0U, 0x01U}, /* C100645 ASW_DTC_MC_OutleakFault */
+    {0xD00646UL, 0x80U, 0x01U}, /* C100646 ASW_DTC_MC_InleakFault */
+    {0xD00647UL, 0xA0U, 0x01U}, /* C100647 ASW_DTC_IMUyawrateSignalErrLevel */
+    {0xD00648UL, 0x80U, 0x01U}, /* C100648 ASW_DTC_IMUaySignalErrLevel */
+    {0xD00649UL, 0xA0U, 0x01U}, /* C100649 ASW_DTC_IMUaxSignalErrLevel */
+    {0xD00650UL, 0x80U, 0x01U}, /* C100650 ASW_DTC_SASSignalErrLevel */
+    {0xD00651UL, 0xA0U, 0x01U}, /* C100651 ASW_DTC_BrkConValveDriverFault */
+    {0xD00652UL, 0x80U, 0x01U}, /* C100652 ASW_DTC_WhelPrsConValveDriverFault */
+    {0xD00653UL, 0xA0U, 0x01U}, /* C100653 ASW_DTC_ISV1_Fault */
+    {0xD00654UL, 0x80U, 0x01U}, /* C100654 ASW_DTC_ISV1_OverTempWarn */
+    {0xD00655UL, 0xA0U, 0x01U}, /* C100655 ASW_DTC_ISV2_Fault */
+    {0xD00656UL, 0x80U, 0x01U}, /* C100656 ASW_DTC_ISV2_OverTempWarn */
+    {0xD00657UL, 0xA0U, 0x01U}, /* C100657 ASW_DTC_ISV3_Fault */
+    {0xD00658UL, 0x80U, 0x01U}, /* C100658 ASW_DTC_ISV3_OverTempWarn */
+    {0xD00659UL, 0xA0U, 0x01U}, /* C100659 ASW_DTC_ISV4_Fault */
+    {0xD00660UL, 0x80U, 0x01U}, /* C100660 ASW_DTC_ISV4_OverTempWarn */
+    {0xD00661UL, 0xA0U, 0x01U}, /* C100661 ASW_DTC_PAV_Fault */
+    {0xD00662UL, 0x80U, 0x01U}, /* C100662 ASW_DTC_PAV_OverTempWarn */
+    {0xD00663UL, 0xA0U, 0x01U}, /* C100663 ASW_DTC_PRV_Fault */
+    {0xD00664UL, 0x80U, 0x01U}, /* C100664 ASW_DTC_PRV_OverTempWarn */
+    {0xD00665UL, 0xA0U, 0x01U}, /* C100665 ASW_DTC_BAV_Fault */
+    {0xD00666UL, 0x80U, 0x01U}, /* C100666 ASW_DTC_CSV_Fault */
+    {0xD00667UL, 0xA0U, 0x01U}, /* C100667 ASW_DTC_SSV_Fault */
+    {0xD00668UL, 0x80U, 0x01U}, /* C100668 ASW_DTC_USV_Fault */
+    {0xD00669UL, 0x80U, 0x01U}, /* C100669 ASW_DTC_SASangErr */
+    {0xD00670UL, 0xA0U, 0x01U}, /* C100670 ASW_DTC_BrkSwitchErr */
+    {0xD00671UL, 0x80U, 0x01U}, /* C100671 ASW_DTC_PowerSysErr */
+    {0xD00672UL, 0xA0U, 0x01U}, /* C100672 ASW_DTC_AccPosErr */
+    {0xD00673UL, 0x80U, 0x01U}, /* C100673 ASW_DTC_GearPosErr */
+    {0xD00674UL, 0xA0U, 0x01U}, /* C100674 ASW_DTC_BtrErr */
+    {0xD00675UL, 0x80U, 0x01U}, /* C100675 ASW_DTC_BrkFluidLevel_Low */
+    {0xD00676UL, 0xA0U, 0x01U}, /* C100676 ASW_DTC_SeatBltErr */
+    {0xD00677UL, 0x80U, 0x01U}, /* C100677 ASW_DTC_DoorsErr */
+    {0xD00678UL, 0xA0U, 0x01U}, /* C100678 ASW_DTC_AdasConnectErr */
+    {0xD00679UL, 0x80U, 0x01U}, /* C100679 ASW_DTC_ExternalEPBErr */
+};
+
 void uds_dtc_app_init(void) {
     memset(&s_dtc_storage, 0, sizeof(s_dtc_storage));
     s_dtc_storage.status_availability_mask = 0xFFU;
-    s_dtc_storage.record_count = 3U;
+
+    /* Populate 66 OEM DTC records */
+    for (uint8_t i = 0U; i < UDS_DTC_OEM_COUNT; ++i) {
+        s_dtc_storage.records[i].dtc_number = s_oem_dtc_defs[i].dtc_number;
+        s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
+        s_dtc_storage.records[i].severity = s_oem_dtc_defs[i].severity;
+        s_dtc_storage.records[i].functional_unit = s_oem_dtc_defs[i].functional_unit;
+        s_dtc_storage.records[i].fault_counter = 0;
+        s_dtc_storage.records[i].occurrence_counter = 0U;
+        s_dtc_storage.records[i].aging_counter = 0U;
+        s_dtc_storage.records[i].snapshot_length = 0U;
+        s_dtc_storage.records[i].extended_length = 0U;
+        s_dtc_storage.records[i].active = false;
+    }
+    s_dtc_storage.record_count = UDS_DTC_OEM_COUNT;
 
     /* Baseline DTC 1: P0100 - Mass Air Flow Sensor A Circuit (0x010000) */
-    s_dtc_storage.records[0].dtc_number = 0x010000UL;
-    s_dtc_storage.records[0].status_byte = 0x2FU; /* Confirmed, pending, test failed */
-    s_dtc_storage.records[0].severity = 0x40U;    /* Check at next halt */
-    s_dtc_storage.records[0].functional_unit = 0x01U;
-    s_dtc_storage.records[0].fault_counter = 127;
-    s_dtc_storage.records[0].occurrence_counter = 5U;
-    s_dtc_storage.records[0].aging_counter = 0x28U;
-    s_dtc_storage.records[0].snapshot_length = 4U;
-    s_dtc_storage.records[0].snapshot_data[0] = 0x0CU; /* Engine RPM: 3072 */
-    s_dtc_storage.records[0].snapshot_data[1] = 0x00U;
-    s_dtc_storage.records[0].snapshot_data[2] = 0x32U; /* Coolant Temp: 50 C */
-    s_dtc_storage.records[0].snapshot_data[3] = 0x88U; /* Battery 13.6 V */
-    s_dtc_storage.records[0].extended_length = 2U;
-    s_dtc_storage.records[0].extended_data[0] = 0x05U; /* Occurrence count: 5 */
-    s_dtc_storage.records[0].extended_data[1] = 0x28U; /* Aging counter */
-    s_dtc_storage.records[0].active = true;
+    uint8_t b1 = s_dtc_storage.record_count++;
+    s_dtc_storage.records[b1].dtc_number = 0x010000UL;
+    s_dtc_storage.records[b1].status_byte = 0x2FU; /* Confirmed, pending, test failed */
+    s_dtc_storage.records[b1].severity = 0x40U;    /* Check at next halt */
+    s_dtc_storage.records[b1].functional_unit = 0x01U;
+    s_dtc_storage.records[b1].fault_counter = 127;
+    s_dtc_storage.records[b1].occurrence_counter = 5U;
+    s_dtc_storage.records[b1].aging_counter = 0x28U;
+    s_dtc_storage.records[b1].snapshot_length = 4U;
+    s_dtc_storage.records[b1].snapshot_data[0] = 0x0CU; /* Engine RPM: 3072 */
+    s_dtc_storage.records[b1].snapshot_data[1] = 0x00U;
+    s_dtc_storage.records[b1].snapshot_data[2] = 0x32U; /* Coolant Temp: 50 C */
+    s_dtc_storage.records[b1].snapshot_data[3] = 0x88U; /* Battery 13.6 V */
+    s_dtc_storage.records[b1].extended_length = 2U;
+    s_dtc_storage.records[b1].extended_data[0] = 0x05U; /* Occurrence count: 5 */
+    s_dtc_storage.records[b1].extended_data[1] = 0x28U; /* Aging counter */
+    s_dtc_storage.records[b1].active = true;
 
     /* Baseline DTC 2: U0100 - Lost Communication with ECM/PCM (0xC10000) */
-    s_dtc_storage.records[1].dtc_number = 0xC10000UL;
-    s_dtc_storage.records[1].status_byte = 0x08U; /* Confirmed */
-    s_dtc_storage.records[1].severity = 0x80U;    /* Immediate check */
-    s_dtc_storage.records[1].functional_unit = 0x02U;
-    s_dtc_storage.records[1].fault_counter = 50;
-    s_dtc_storage.records[1].occurrence_counter = 1U;
-    s_dtc_storage.records[1].aging_counter = 0x28U;
-    s_dtc_storage.records[1].snapshot_length = 2U;
-    s_dtc_storage.records[1].snapshot_data[0] = 0x00U;
-    s_dtc_storage.records[1].snapshot_data[1] = 0x00U;
-    s_dtc_storage.records[1].extended_length = 2U;
-    s_dtc_storage.records[1].extended_data[0] = 0x01U;
-    s_dtc_storage.records[1].extended_data[1] = 0x28U;
-    s_dtc_storage.records[1].active = true;
+    uint8_t b2 = s_dtc_storage.record_count++;
+    s_dtc_storage.records[b2].dtc_number = 0xC10000UL;
+    s_dtc_storage.records[b2].status_byte = 0x08U; /* Confirmed */
+    s_dtc_storage.records[b2].severity = 0x80U;    /* Immediate check */
+    s_dtc_storage.records[b2].functional_unit = 0x02U;
+    s_dtc_storage.records[b2].fault_counter = 50;
+    s_dtc_storage.records[b2].occurrence_counter = 1U;
+    s_dtc_storage.records[b2].aging_counter = 0x28U;
+    s_dtc_storage.records[b2].snapshot_length = 2U;
+    s_dtc_storage.records[b2].snapshot_data[0] = 0x00U;
+    s_dtc_storage.records[b2].snapshot_data[1] = 0x00U;
+    s_dtc_storage.records[b2].extended_length = 2U;
+    s_dtc_storage.records[b2].extended_data[0] = 0x01U;
+    s_dtc_storage.records[b2].extended_data[1] = 0x28U;
+    s_dtc_storage.records[b2].active = true;
 
     /* Baseline DTC 3: B0001 - Driver Airbag Deployment Loop (0x800100) */
-    s_dtc_storage.records[2].dtc_number = 0x800100UL;
-    s_dtc_storage.records[2].status_byte = 0x01U; /* Test failed */
-    s_dtc_storage.records[2].severity = 0xA0U;    /* Maintenance immediately */
-    s_dtc_storage.records[2].functional_unit = 0x03U;
-    s_dtc_storage.records[2].fault_counter = 10;
-    s_dtc_storage.records[2].occurrence_counter = 2U;
-    s_dtc_storage.records[2].aging_counter = 0x28U;
-    s_dtc_storage.records[2].snapshot_length = 2U;
-    s_dtc_storage.records[2].snapshot_data[0] = 0x12U;
-    s_dtc_storage.records[2].snapshot_data[1] = 0x34U;
-    s_dtc_storage.records[2].extended_length = 2U;
-    s_dtc_storage.records[2].extended_data[0] = 0x02U;
-    s_dtc_storage.records[2].extended_data[1] = 0x28U;
-    s_dtc_storage.records[2].active = true;
+    uint8_t b3 = s_dtc_storage.record_count++;
+    s_dtc_storage.records[b3].dtc_number = 0x800100UL;
+    s_dtc_storage.records[b3].status_byte = 0x01U; /* Test failed */
+    s_dtc_storage.records[b3].severity = 0xA0U;    /* Maintenance immediately */
+    s_dtc_storage.records[b3].functional_unit = 0x03U;
+    s_dtc_storage.records[b3].fault_counter = 10;
+    s_dtc_storage.records[b3].occurrence_counter = 2U;
+    s_dtc_storage.records[b3].aging_counter = 0x28U;
+    s_dtc_storage.records[b3].snapshot_length = 2U;
+    s_dtc_storage.records[b3].snapshot_data[0] = 0x12U;
+    s_dtc_storage.records[b3].snapshot_data[1] = 0x34U;
+    s_dtc_storage.records[b3].extended_length = 2U;
+    s_dtc_storage.records[b3].extended_data[0] = 0x02U;
+    s_dtc_storage.records[b3].extended_data[1] = 0x28U;
+    s_dtc_storage.records[b3].active = true;
 
     /* Enable all subfunctions capability bits */
     s_dtc_storage.backend.capabilities = 0x03FFFFFFUL;

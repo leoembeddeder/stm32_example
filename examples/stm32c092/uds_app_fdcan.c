@@ -19,11 +19,30 @@ __attribute__((weak))
 void uds_c092_platform_reset_poll(void) {
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) void uds_dtc_app_init(void) {
+}
+__attribute__((weak)) const UdsDtcBackend *uds_dtc_app_get_backend(void) {
+    return NULL;
+}
+__attribute__((weak)) UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
+    (void)context;
+    (void)group_of_dtc;
+    return UDS_RESULT_OUT_OF_RANGE;
+}
+#else
+void uds_dtc_app_init(void);
+const UdsDtcBackend *uds_dtc_app_get_backend(void);
+UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc);
+#endif
+
 void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
                        const UdsCallbacks *application_callbacks, void *uds_context,
                        UdsIsoTpResetEventFn reset_event, void *reset_event_context) {
     if (transport == NULL)
         return;
+
+    uds_dtc_app_init();
 
     UdsIsoTpEndpointConfig config = {0};
     isotp_config_classic_can(&config.isotp_config);
@@ -42,6 +61,10 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
     config.functional_request_id = UDS_C092_FUNCTIONAL_REQUEST_ID;
     if (application_callbacks != NULL)
         config.uds_callbacks = *application_callbacks;
+    if (config.uds_callbacks.dtc_backend == NULL)
+        config.uds_callbacks.dtc_backend = uds_dtc_app_get_backend();
+    if (config.uds_callbacks.clear_dtc == NULL)
+        config.uds_callbacks.clear_dtc = uds_dtc_app_clear;
     config.uds_callbacks.ecu_reset = uds_c092_platform_reset_prepare;
     config.uds_callbacks.ecu_reset_execute = uds_c092_platform_reset_execute;
     config.uds_context = uds_context;
