@@ -127,9 +127,10 @@ static UdsDownload s_bl_download;
 
 #if !defined(HAL_FLASH_MODULE_ENABLED)
 #define UDS_BL_MOCK_FLASH_SIZE 4096U
-static uint8_t s_mock_flash_mem[UDS_BL_MOCK_FLASH_SIZE];
-static uint32_t s_mock_flash_base = 0U;
-static uint32_t s_mock_flash_len = 0U;
+static uint8_t s_mock_flash_slot_a[UDS_BL_MOCK_FLASH_SIZE];
+static uint8_t s_mock_flash_slot_b[UDS_BL_MOCK_FLASH_SIZE];
+static uint32_t s_mock_flash_slot_a_len = 0U;
+static uint32_t s_mock_flash_slot_b_len = 0U;
 #endif
 
 static uint32_t bootloader_calc_crc32(const uint8_t *data, uint32_t length) {
@@ -183,9 +184,13 @@ static UdsDownloadResult bootloader_flash_erase_start(void *context, uint32_t ad
     HAL_FLASH_Lock();
 #endif
 #else
-    s_mock_flash_base = address;
-    s_mock_flash_len = 0U;
-    (void)memset(s_mock_flash_mem, 0xFF, sizeof(s_mock_flash_mem));
+    if (address >= s_bl_ctx.target_slot_addr) {
+        s_mock_flash_slot_b_len = 0U;
+        (void)memset(s_mock_flash_slot_b, 0xFF, sizeof(s_mock_flash_slot_b));
+    } else {
+        s_mock_flash_slot_a_len = 0U;
+        (void)memset(s_mock_flash_slot_a, 0xFF, sizeof(s_mock_flash_slot_a));
+    }
 #endif
     return UDS_DOWNLOAD_OK;
 }
@@ -260,11 +265,24 @@ static UdsDownloadResult bootloader_flash_program(void *context, uint32_t addres
 #endif
     HAL_FLASH_Lock();
 #else
-    (void)address;
     if ((data != NULL) && (length > 0U)) {
-        if ((s_mock_flash_len + (uint32_t)length) <= sizeof(s_mock_flash_mem)) {
-            (void)memcpy(&s_mock_flash_mem[s_mock_flash_len], data, (size_t)length);
-            s_mock_flash_len += (uint32_t)length;
+        if (address >= s_bl_ctx.target_slot_addr) {
+            uint32_t offset = address - s_bl_ctx.target_slot_addr;
+            if ((offset + (uint32_t)length) <= sizeof(s_mock_flash_slot_b)) {
+                (void)memcpy(&s_mock_flash_slot_b[offset], data, (size_t)length);
+                if ((offset + (uint32_t)length) > s_mock_flash_slot_b_len) {
+                    s_mock_flash_slot_b_len = offset + (uint32_t)length;
+                }
+            }
+        } else {
+            uint32_t offset =
+                (address >= s_bl_ctx.active_slot_addr) ? (address - s_bl_ctx.active_slot_addr) : 0U;
+            if ((offset + (uint32_t)length) <= sizeof(s_mock_flash_slot_a)) {
+                (void)memcpy(&s_mock_flash_slot_a[offset], data, (size_t)length);
+                if ((offset + (uint32_t)length) > s_mock_flash_slot_a_len) {
+                    s_mock_flash_slot_a_len = offset + (uint32_t)length;
+                }
+            }
         }
     }
 #endif
@@ -283,8 +301,14 @@ static UdsDownloadResult bootloader_flash_verify(void *context, const UdsDownloa
     const uint8_t *flash_ptr = (const uint8_t *)(uintptr_t)metadata->image_address;
     computed_flash_crc = bootloader_calc_crc32(flash_ptr, metadata->image_length);
 #else
-    if ((s_mock_flash_len > 0U) && (s_mock_flash_len == metadata->image_length)) {
-        computed_flash_crc = bootloader_calc_crc32(s_mock_flash_mem, metadata->image_length);
+    const uint8_t *mock_buf = (metadata->image_address >= s_bl_ctx.target_slot_addr)
+                                  ? s_mock_flash_slot_b
+                                  : s_mock_flash_slot_a;
+    uint32_t mock_len = (metadata->image_address >= s_bl_ctx.target_slot_addr)
+                            ? s_mock_flash_slot_b_len
+                            : s_mock_flash_slot_a_len;
+    if ((mock_len > 0U) && (mock_len >= metadata->image_length)) {
+        computed_flash_crc = bootloader_calc_crc32(mock_buf, metadata->image_length);
     } else {
         computed_flash_crc = metadata->crc32 ^ 0xFFFFFFFFUL;
     }
@@ -311,6 +335,78 @@ UdsDownloadResult uds_bootloader_flash_verify(const UdsDownloadMetadata *metadat
 
 UdsDownloadResult uds_bootloader_flash_erase_poll(void) {
     return bootloader_flash_erase_poll(NULL);
+}
+
+UdsDownloadResult uds_bootloader_activate_candidate(void) {
+    if (!s_bl_ctx.candidate_verified) {
+        return UDS_DOWNLOAD_SEQUENCE_ERROR;
+    }
+
+    if (s_bl_ctx.target == UDS_BL_TARGET_STM32C092) {
+        uint32_t image_size = s_bl_ctx.staging_metadata.image_size;
+        if ((image_size == 0U) || (image_size > s_bl_ctx.active_slot_size)) {
+            return UDS_DOWNLOAD_OUT_OF_RANGE;
+        }
+
+        uint32_t slot_a_addr = s_bl_ctx.active_slot_addr;
+
+        /* 1. Erase Slot A for the candidate image size */
+        UdsDownloadResult erase_res = bootloader_flash_erase_start(NULL, slot_a_addr, image_size);
+        if (erase_res != UDS_DOWNLOAD_OK) {
+            return erase_res;
+        }
+        UdsDownloadResult poll_res = bootloader_flash_erase_poll(NULL);
+        if (poll_res != UDS_DOWNLOAD_OK) {
+            return poll_res;
+        }
+
+        /* 2. Copy candidate image from Slot B to Slot A */
+#if defined(HAL_FLASH_MODULE_ENABLED)
+        uint32_t slot_b_addr = s_bl_ctx.target_slot_addr;
+        const uint8_t *src = (const uint8_t *)(uintptr_t)slot_b_addr;
+        uint32_t bytes_written = 0U;
+        while (bytes_written < image_size) {
+            uint16_t chunk_len = ((image_size - bytes_written) > 256U)
+                                     ? 256U
+                                     : (uint16_t)(image_size - bytes_written);
+            UdsDownloadResult prog_res = bootloader_flash_program(NULL, slot_a_addr + bytes_written,
+                                                                  &src[bytes_written], chunk_len);
+            if (prog_res != UDS_DOWNLOAD_OK) {
+                return prog_res;
+            }
+            bytes_written += chunk_len;
+        }
+
+        /* 3. Read back from Slot A and verify CRC32 */
+        const uint8_t *dest = (const uint8_t *)(uintptr_t)slot_a_addr;
+        uint32_t flash_crc = bootloader_calc_crc32(dest, image_size);
+        if ((s_bl_ctx.staging_metadata.crc32 != 0U) &&
+            (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
+            return UDS_DOWNLOAD_VERIFY_ERROR;
+        }
+#else
+        uint32_t copy_len = (image_size > sizeof(s_mock_flash_slot_b))
+                                ? (uint32_t)sizeof(s_mock_flash_slot_b)
+                                : image_size;
+        UdsDownloadResult prog_res =
+            bootloader_flash_program(NULL, slot_a_addr, s_mock_flash_slot_b, (uint16_t)copy_len);
+        if (prog_res != UDS_DOWNLOAD_OK) {
+            return prog_res;
+        }
+
+        uint32_t flash_crc = bootloader_calc_crc32(s_mock_flash_slot_a, copy_len);
+        if ((s_bl_ctx.staging_metadata.crc32 != 0U) &&
+            (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
+            return UDS_DOWNLOAD_VERIFY_ERROR;
+        }
+#endif
+    }
+
+    /* 4. Update active version and slot status */
+    s_bl_ctx.active_version = s_bl_ctx.staging_metadata.version;
+    s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_ACTIVE;
+    s_bl_ctx.candidate_verified = false;
+    return UDS_DOWNLOAD_OK;
 }
 
 void uds_bootloader_set_target(UdsBootloaderTarget target) {

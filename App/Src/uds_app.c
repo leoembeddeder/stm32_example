@@ -75,7 +75,13 @@ static UdsCallbackResult uds_app_ecu_reset_prepare(void *context, uint8_t subfun
 static void uds_app_ecu_reset_execute(void *context, uint8_t subfunction) {
     (void)context;
     if (uds_bootloader_is_activation_pending()) {
-        uds_bootloader_jump_to_app(UDS_BL_APP_SLOT_B_START);
+        if (uds_bootloader_get_target() == UDS_BL_TARGET_STM32C092) {
+            (void)uds_bootloader_activate_candidate();
+            uds_bootloader_jump_to_app(UDS_BL_C092_APP_SLOT_A_START);
+        } else {
+            (void)uds_bootloader_activate_candidate();
+            uds_bootloader_jump_to_app(UDS_BL_F767_APP_SLOT_B_START);
+        }
     }
     uds_platform_system_reset(subfunction);
 }

@@ -155,8 +155,46 @@ static void test_c092_bootloader_flash_verify_and_erase_poll(void) {
            UDS_DOWNLOAD_VERIFY_ERROR);
 }
 
+static void test_c092_activate_candidate(void) {
+    uds_bootloader_set_target(UDS_BL_TARGET_STM32C092);
+    assert(uds_bootloader_get_active_version() == 1U);
+    assert(!uds_bootloader_is_activation_pending());
+
+    /* 1. Attempt activation before verification must fail */
+    assert(uds_bootloader_activate_candidate() == UDS_DOWNLOAD_SEQUENCE_ERROR);
+
+    /* 2. Download and verify new candidate image (version 3) */
+    FirmwareMetadata_t meta;
+    (void)memset(&meta, 0, sizeof(meta));
+    meta.magic = UDS_BL_METADATA_MAGIC;
+    meta.version = 3U;
+    meta.image_size = sizeof(FirmwareMetadata_t);
+    const uint8_t empty_sha256[32] = {0xe3U, 0xb0U, 0xc4U, 0x42U, 0x98U, 0xfcU, 0x1cU, 0x14U,
+                                      0x9aU, 0xfbU, 0xf4U, 0xc8U, 0x99U, 0x6fU, 0xb9U, 0x24U,
+                                      0x27U, 0xaeU, 0x41U, 0xe4U, 0x64U, 0x9bU, 0x93U, 0x4cU,
+                                      0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
+    (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
+
+    uint8_t routine_out[16];
+    uint16_t routine_out_len = 0U;
+    assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
+                                          (const uint8_t *)&meta, sizeof(meta), routine_out,
+                                          &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
+    assert(routine_out[0] == 0x00U);
+    assert(uds_bootloader_is_activation_pending());
+
+    /* 3. Execute Copy-on-Reset candidate activation from Slot B to Slot A */
+    assert(uds_bootloader_activate_candidate() == UDS_DOWNLOAD_OK);
+    assert(uds_bootloader_get_active_version() == 3U);
+    assert(!uds_bootloader_is_activation_pending());
+
+    /* 4. Subsequent activation without new candidate must fail */
+    assert(uds_bootloader_activate_candidate() == UDS_DOWNLOAD_SEQUENCE_ERROR);
+}
+
 int main(void) {
     test_c092_bootloader_memory_map_and_flow();
     test_c092_bootloader_flash_verify_and_erase_poll();
+    test_c092_activate_candidate();
     return 0;
 }

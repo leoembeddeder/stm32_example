@@ -6,7 +6,231 @@
 
 #include <string.h>
 
+static const uint8_t s_p0100_snapshot[4] = {0x0CU, 0x00U, 0x32U, 0x88U};
+static const uint8_t s_p0100_extended[2] = {0x05U, 0x28U};
+
+static const uint8_t s_u0100_snapshot[2] = {0x00U, 0x00U};
+static const uint8_t s_u0100_extended[2] = {0x01U, 0x28U};
+
+static const uint8_t s_b0001_snapshot[2] = {0x12U, 0x34U};
+static const uint8_t s_b0001_extended[2] = {0x02U, 0x28U};
+
+static const UdsDtcRomDef s_rom_dtc_defs[UDS_DTC_STATIC_COUNT] = {
+    {0xF00614UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* U300614 ASW_DTC_BatteryVoltHighWarn */
+    {0xF00615UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* U300615 ASW_DTC_BatteryVoltLowWarn */
+    {0xD00616UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100616 ASW_DTC_BatteryVoltHigh */
+    {0xD00617UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100617 ASW_DTC_BatteryVoltLow */
+    {0xD00618UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100618 ASW_DTC_CanBusOff */
+    {0xD00619UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100619 ASW_DTC_SysPrs_SigLost */
+    {0xD00620UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100620 ASW_DTC_SysPrs_OverLimit */
+    {0xD00621UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100621 ASW_DTC_SysPrs_JumpErr */
+    {0xD00622UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100622 ASW_DTC_AccuPrs_SigLost */
+    {0xD00623UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100623 ASW_DTC_AccuPrs_OverLimit */
+    {0xD00624UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100624 ASW_DTC_AccuPrs_JumpErr */
+    {0xD00625UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100625 ASW_DTC_PfsPrs_SigLost */
+    {0xD00626UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100626 ASW_DTC_PfsPrs_OverLimit */
+    {0xD00627UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100627 ASW_DTC_PfsPrs_JumpErr */
+    {0xD00628UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100628 ASW_DTC_PipeLineErrFL */
+    {0xD00629UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100629 ASW_DTC_PipeLineErrFR */
+    {0xD00630UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100630 ASW_DTC_PipeLineErrRL */
+    {0xD00631UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100631 ASW_DTC_PipeLineErrRR */
+    {0xD00632UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100632 ASW_DTC_WssFL_Err */
+    {0xD00633UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100633 ASW_DTC_WssFR_Err */
+    {0xD00634UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100634 ASW_DTC_WssRL_Err */
+    {0xD00635UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100635 ASW_DTC_WssRR_Err */
+    {0xD00636UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100636 ASW_DTC_AccuLowPrs_Err */
+    {0xD00637UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100637 ASW_DTC_AccuPrsHoldErr */
+    {0xD00638UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100638 ASW_DTC_PconErr */
+    {0xD00639UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100639 ASW_DTC_AccuPump_DG */
+    {0xD00640UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100640 ASW_DTC_PumpMotLockedRotFault */
+    {0xD00641UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100641 ASW_DTC_AccuPump_Err */
+    {0xD00642UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100642 ASW_DTC_PTS_Err */
+    {0xD00643UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100643 ASW_DTC_PTS_Chanl_1Err */
+    {0xD00644UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100644 ASW_DTC_PTS_Chanl_2Err */
+    {0xD00645UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100645 ASW_DTC_MC_OutleakFault */
+    {0xD00646UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100646 ASW_DTC_MC_InleakFault */
+    {0xD00647UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100647 ASW_DTC_IMUyawrateSignalErrLevel */
+    {0xD00648UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100648 ASW_DTC_IMUaySignalErrLevel */
+    {0xD00649UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100649 ASW_DTC_IMUaxSignalErrLevel */
+    {0xD00650UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100650 ASW_DTC_SASSignalErrLevel */
+    {0xD00651UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100651 ASW_DTC_BrkConValveDriverFault */
+    {0xD00652UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100652 ASW_DTC_WhelPrsConValveDriverFault */
+    {0xD00653UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100653 ASW_DTC_ISV1_Fault */
+    {0xD00654UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100654 ASW_DTC_ISV1_OverTempWarn */
+    {0xD00655UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100655 ASW_DTC_ISV2_Fault */
+    {0xD00656UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100656 ASW_DTC_ISV2_OverTempWarn */
+    {0xD00657UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100657 ASW_DTC_ISV3_Fault */
+    {0xD00658UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100658 ASW_DTC_ISV3_OverTempWarn */
+    {0xD00659UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100659 ASW_DTC_ISV4_Fault */
+    {0xD00660UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100660 ASW_DTC_ISV4_OverTempWarn */
+    {0xD00661UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100661 ASW_DTC_PAV_Fault */
+    {0xD00662UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100662 ASW_DTC_PAV_OverTempWarn */
+    {0xD00663UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100663 ASW_DTC_PRV_Fault */
+    {0xD00664UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100664 ASW_DTC_PRV_OverTempWarn */
+    {0xD00665UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100665 ASW_DTC_BAV_Fault */
+    {0xD00666UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100666 ASW_DTC_CSV_Fault */
+    {0xD00667UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100667 ASW_DTC_SSV_Fault */
+    {0xD00668UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100668 ASW_DTC_USV_Fault */
+    {0xD00669UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100669 ASW_DTC_SASangErr */
+    {0xD00670UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100670 ASW_DTC_BrkSwitchErr */
+    {0xD00671UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100671 ASW_DTC_PowerSysErr */
+    {0xD00672UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100672 ASW_DTC_AccPosErr */
+    {0xD00673UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100673 ASW_DTC_GearPosErr */
+    {0xD00674UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100674 ASW_DTC_BtrErr */
+    {0xD00675UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100675 ASW_DTC_BrkFluidLevel_Low */
+    {0xD00676UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100676 ASW_DTC_SeatBltErr */
+    {0xD00677UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100677 ASW_DTC_DoorsErr */
+    {0xD00678UL, 0xA0U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100678 ASW_DTC_AdasConnectErr */
+    {0xD00679UL, 0x80U, 0x01U, UDS_DTC_STATUS_CLEARED, 0, 0U, 0U, false, NULL, 0U, NULL,
+     0U}, /* C100679 ASW_DTC_ExternalEPBErr */
+
+    /* Baseline DTC 1: P0100 - Mass Air Flow Sensor A Circuit (0x010000) */
+    {0x010000UL, 0x40U, 0x01U, 0x2FU, 127, 5U, 0x28U, true, s_p0100_snapshot, 4U, s_p0100_extended,
+     2U},
+    /* Baseline DTC 2: U0100 - Lost Communication with ECM/PCM (0xC10000) */
+    {0xC10000UL, 0x80U, 0x02U, 0x08U, 50, 1U, 0x28U, true, s_u0100_snapshot, 2U, s_u0100_extended,
+     2U},
+    /* Baseline DTC 3: B0001 - Driver Airbag Deployment Loop (0x800100) */
+    {0x800100UL, 0xA0U, 0x03U, 0x01U, 10, 2U, 0x28U, true, s_b0001_snapshot, 2U, s_b0001_extended,
+     2U},
+};
+
 static UdsDtcAppStorage s_dtc_storage;
+
+static uint8_t get_total_record_count(void) {
+    return (uint8_t)(UDS_DTC_STATIC_COUNT + s_dtc_storage.dynamic_count);
+}
+
+static bool get_dtc_record(uint8_t index, UdsDtcAppRecord *out_rec) {
+    if (out_rec == NULL) {
+        return false;
+    }
+    if (index < UDS_DTC_STATIC_COUNT) {
+        const UdsDtcRomDef *rom = &s_rom_dtc_defs[index];
+        const UdsDtcRamStatus *ram = &s_dtc_storage.static_status[index];
+        out_rec->dtc_number = rom->dtc_number;
+        out_rec->severity = rom->severity;
+        out_rec->functional_unit = rom->functional_unit;
+        out_rec->status_byte = ram->status_byte;
+        out_rec->fault_counter = ram->fault_counter;
+        out_rec->occurrence_counter = ram->occurrence_counter;
+        out_rec->aging_counter = ram->aging_counter;
+        out_rec->active = ram->active;
+        out_rec->snapshot_data = rom->snapshot_data;
+        out_rec->snapshot_length = rom->snapshot_length;
+        out_rec->extended_data = rom->extended_data;
+        out_rec->extended_length = rom->extended_length;
+        return true;
+    }
+    uint8_t d = (uint8_t)(index - UDS_DTC_STATIC_COUNT);
+    if (d < s_dtc_storage.dynamic_count) {
+        const UdsDtcDynamicRecord *dyn = &s_dtc_storage.dynamic_records[d];
+        out_rec->dtc_number = dyn->dtc_number;
+        out_rec->severity = dyn->severity;
+        out_rec->functional_unit = dyn->functional_unit;
+        out_rec->status_byte = dyn->status.status_byte;
+        out_rec->fault_counter = dyn->status.fault_counter;
+        out_rec->occurrence_counter = dyn->status.occurrence_counter;
+        out_rec->aging_counter = dyn->status.aging_counter;
+        out_rec->active = dyn->status.active;
+        out_rec->snapshot_data = NULL;
+        out_rec->snapshot_length = 0U;
+        out_rec->extended_data = NULL;
+        out_rec->extended_length = 0U;
+        return true;
+    }
+    return false;
+}
+
+static UdsDtcRamStatus *get_dtc_ram_status(uint8_t index) {
+    if (index < UDS_DTC_STATIC_COUNT) {
+        return &s_dtc_storage.static_status[index];
+    }
+    uint8_t d = (uint8_t)(index - UDS_DTC_STATIC_COUNT);
+    if (d < s_dtc_storage.dynamic_count) {
+        return &s_dtc_storage.dynamic_records[d].status;
+    }
+    return NULL;
+}
+
+static int16_t find_dtc_index(uint32_t dtc) {
+    for (uint8_t i = 0U; i < UDS_DTC_STATIC_COUNT; ++i) {
+        if (s_rom_dtc_defs[i].dtc_number == dtc) {
+            return (int16_t)i;
+        }
+    }
+    for (uint8_t d = 0U; d < s_dtc_storage.dynamic_count; ++d) {
+        if (s_dtc_storage.dynamic_records[d].dtc_number == dtc) {
+            return (int16_t)(UDS_DTC_STATIC_COUNT + d);
+        }
+    }
+    return -1;
+}
 
 static bool append_byte(uint8_t *resp, uint16_t *len, uint16_t cap, uint8_t val) {
     if ((*len >= cap) || (resp == NULL)) {
@@ -55,8 +279,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
     case 0x11U:
     case 0x12U: {
         uint16_t count = 0U;
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && ((rec->status_byte & status_mask) != 0U)) {
                 count++;
             }
@@ -85,8 +312,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
                          s_dtc_storage.status_availability_mask)) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             bool include = false;
             if (subfunction == 0x0AU) {
                 include = true; /* All supported DTCs */
@@ -114,8 +344,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
                          s_dtc_storage.status_availability_mask)) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && ((rec->status_byte & status_mask) != 0U)) {
                 if (!append_dtc(response, &len, response_capacity, rec)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
@@ -135,8 +368,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
                          s_dtc_storage.status_availability_mask)) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && ((rec->status_byte & req_status_mask) != 0U) &&
                 ((rec->severity & req_severity_mask) != 0U)) {
                 if (!append_byte(response, &len, response_capacity, rec->severity) ||
@@ -157,8 +393,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
                          s_dtc_storage.status_availability_mask)) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && ((rec->status_byte & UDS_DTC_STATUS_CONFIRMED) != 0U)) {
                 if (!append_byte(response, &len, response_capacity, rec->severity) ||
                     !append_byte(response, &len, response_capacity, rec->functional_unit) ||
@@ -172,8 +411,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
 
     /* 0x03: Snapshot identification */
     case 0x03U: {
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active) {
                 if (!append_dtc(response, &len, response_capacity, rec) ||
                     !append_byte(response, &len, response_capacity,
@@ -197,8 +439,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             }
         }
         bool found = false;
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && dtc_matches_request(rec, request, request_length)) {
                 found = true;
                 uint8_t record_num =
@@ -256,8 +501,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
         if (!append_byte(response, &len, response_capacity, rec_num)) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active) {
                 if (!append_dtc(response, &len, response_capacity, rec) ||
                     !append_byte(response, &len, response_capacity, rec_num)) {
@@ -288,8 +536,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             }
         }
         bool found = false;
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && dtc_matches_request(rec, request, request_length)) {
                 found = true;
                 if (!append_dtc(response, &len, response_capacity, rec)) {
@@ -335,8 +586,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
                          s_dtc_storage.status_availability_mask)) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && ((rec->status_byte & status_mask) != 0U)) {
                 if (!append_byte(response, &len, response_capacity, rec->severity) ||
                     !append_byte(response, &len, response_capacity, rec->functional_unit) ||
@@ -351,8 +605,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
     /* 0x09: Severity Information of DTC */
     case 0x09U: {
         bool found = false;
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active && dtc_matches_request(rec, request, request_length)) {
                 found = true;
                 if (!append_byte(response, &len, response_capacity,
@@ -373,8 +630,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
 
     /* 0x14: Fault Detection Counter */
     case 0x14U: {
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+        uint8_t total_count = get_total_record_count();
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec_storage;
+            (void)get_dtc_record(i, &rec_storage);
+            const UdsDtcAppRecord *rec = &rec_storage;
             if (rec->active) {
                 if (!append_byte(response, &len, response_capacity,
                                  (uint8_t)(rec->dtc_number >> 16U)) ||
@@ -407,16 +667,19 @@ bool uds_dtc_app_save_to_nvm(void) {
     }
     UdsDtcNvBlock block;
     memset(&block, 0, sizeof(block));
-    block.record_count = s_dtc_storage.record_count;
-    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-        block.records[i].dtc_number = s_dtc_storage.records[i].dtc_number;
-        block.records[i].status_byte = s_dtc_storage.records[i].status_byte;
-        block.records[i].severity = s_dtc_storage.records[i].severity;
-        block.records[i].functional_unit = s_dtc_storage.records[i].functional_unit;
-        block.records[i].fault_counter = s_dtc_storage.records[i].fault_counter;
-        block.records[i].occurrence_counter = s_dtc_storage.records[i].occurrence_counter;
-        block.records[i].aging_counter = s_dtc_storage.records[i].aging_counter;
-        block.records[i].active = s_dtc_storage.records[i].active;
+    uint8_t total_count = get_total_record_count();
+    block.record_count = total_count;
+    for (uint8_t i = 0U; i < total_count; ++i) {
+        UdsDtcAppRecord rec;
+        (void)get_dtc_record(i, &rec);
+        block.records[i].dtc_number = rec.dtc_number;
+        block.records[i].status_byte = rec.status_byte;
+        block.records[i].severity = rec.severity;
+        block.records[i].functional_unit = rec.functional_unit;
+        block.records[i].fault_counter = rec.fault_counter;
+        block.records[i].occurrence_counter = rec.occurrence_counter;
+        block.records[i].aging_counter = rec.aging_counter;
+        block.records[i].active = rec.active;
     }
     return (uds_param_save(s_dtc_storage.nvm_store, &block) == UDS_PARAM_OK);
 }
@@ -429,169 +692,47 @@ bool uds_dtc_app_load_from_nvm(void) {
     if (uds_param_load(s_dtc_storage.nvm_store, &block) != UDS_PARAM_OK) {
         return false;
     }
-    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-        for (uint8_t j = 0U; j < block.record_count; ++j) {
-            if (s_dtc_storage.records[i].dtc_number == block.records[j].dtc_number) {
-                s_dtc_storage.records[i].status_byte = block.records[j].status_byte;
-                s_dtc_storage.records[i].severity = block.records[j].severity;
-                s_dtc_storage.records[i].functional_unit = block.records[j].functional_unit;
-                s_dtc_storage.records[i].fault_counter = block.records[j].fault_counter;
-                s_dtc_storage.records[i].occurrence_counter = block.records[j].occurrence_counter;
-                s_dtc_storage.records[i].aging_counter = block.records[j].aging_counter;
-                s_dtc_storage.records[i].active = block.records[j].active;
-                break;
+    for (uint8_t j = 0U; j < block.record_count; ++j) {
+        int16_t idx = find_dtc_index(block.records[j].dtc_number);
+        if (idx >= 0) {
+            UdsDtcRamStatus *ram = get_dtc_ram_status((uint8_t)idx);
+            if (ram != NULL) {
+                ram->status_byte = block.records[j].status_byte;
+                ram->fault_counter = block.records[j].fault_counter;
+                ram->occurrence_counter = block.records[j].occurrence_counter;
+                ram->aging_counter = block.records[j].aging_counter;
+                ram->active = block.records[j].active;
             }
+        } else if (s_dtc_storage.dynamic_count < UDS_DTC_DYNAMIC_MAX) {
+            uint8_t d = s_dtc_storage.dynamic_count++;
+            s_dtc_storage.dynamic_records[d].dtc_number = block.records[j].dtc_number;
+            s_dtc_storage.dynamic_records[d].severity = block.records[j].severity;
+            s_dtc_storage.dynamic_records[d].functional_unit = block.records[j].functional_unit;
+            s_dtc_storage.dynamic_records[d].status.status_byte = block.records[j].status_byte;
+            s_dtc_storage.dynamic_records[d].status.fault_counter = block.records[j].fault_counter;
+            s_dtc_storage.dynamic_records[d].status.occurrence_counter =
+                block.records[j].occurrence_counter;
+            s_dtc_storage.dynamic_records[d].status.aging_counter = block.records[j].aging_counter;
+            s_dtc_storage.dynamic_records[d].status.active = block.records[j].active;
         }
     }
     return true;
 }
 
-typedef struct {
-    uint32_t dtc_number;
-    uint8_t severity;
-    uint8_t functional_unit;
-} UdsOemDtcDef;
-
-static const UdsOemDtcDef s_oem_dtc_defs[UDS_DTC_OEM_COUNT] = {
-    {0xF00614UL, 0x80U, 0x01U}, /* U300614 ASW_DTC_BatteryVoltHighWarn */
-    {0xF00615UL, 0xA0U, 0x01U}, /* U300615 ASW_DTC_BatteryVoltLowWarn */
-    {0xD00616UL, 0x80U, 0x01U}, /* C100616 ASW_DTC_BatteryVoltHigh */
-    {0xD00617UL, 0xA0U, 0x01U}, /* C100617 ASW_DTC_BatteryVoltLow */
-    {0xD00618UL, 0x80U, 0x01U}, /* C100618 ASW_DTC_CanBusOff */
-    {0xD00619UL, 0xA0U, 0x01U}, /* C100619 ASW_DTC_SysPrs_SigLost */
-    {0xD00620UL, 0x80U, 0x01U}, /* C100620 ASW_DTC_SysPrs_OverLimit */
-    {0xD00621UL, 0xA0U, 0x01U}, /* C100621 ASW_DTC_SysPrs_JumpErr */
-    {0xD00622UL, 0x80U, 0x01U}, /* C100622 ASW_DTC_AccuPrs_SigLost */
-    {0xD00623UL, 0xA0U, 0x01U}, /* C100623 ASW_DTC_AccuPrs_OverLimit */
-    {0xD00624UL, 0x80U, 0x01U}, /* C100624 ASW_DTC_AccuPrs_JumpErr */
-    {0xD00625UL, 0xA0U, 0x01U}, /* C100625 ASW_DTC_PfsPrs_SigLost */
-    {0xD00626UL, 0x80U, 0x01U}, /* C100626 ASW_DTC_PfsPrs_OverLimit */
-    {0xD00627UL, 0xA0U, 0x01U}, /* C100627 ASW_DTC_PfsPrs_JumpErr */
-    {0xD00628UL, 0x80U, 0x01U}, /* C100628 ASW_DTC_PipeLineErrFL */
-    {0xD00629UL, 0xA0U, 0x01U}, /* C100629 ASW_DTC_PipeLineErrFR */
-    {0xD00630UL, 0x80U, 0x01U}, /* C100630 ASW_DTC_PipeLineErrRL */
-    {0xD00631UL, 0xA0U, 0x01U}, /* C100631 ASW_DTC_PipeLineErrRR */
-    {0xD00632UL, 0x80U, 0x01U}, /* C100632 ASW_DTC_WssFL_Err */
-    {0xD00633UL, 0xA0U, 0x01U}, /* C100633 ASW_DTC_WssFR_Err */
-    {0xD00634UL, 0x80U, 0x01U}, /* C100634 ASW_DTC_WssRL_Err */
-    {0xD00635UL, 0xA0U, 0x01U}, /* C100635 ASW_DTC_WssRR_Err */
-    {0xD00636UL, 0x80U, 0x01U}, /* C100636 ASW_DTC_AccuLowPrs_Err */
-    {0xD00637UL, 0xA0U, 0x01U}, /* C100637 ASW_DTC_AccuPrsHoldErr */
-    {0xD00638UL, 0x80U, 0x01U}, /* C100638 ASW_DTC_PconErr */
-    {0xD00639UL, 0xA0U, 0x01U}, /* C100639 ASW_DTC_AccuPump_DG */
-    {0xD00640UL, 0x80U, 0x01U}, /* C100640 ASW_DTC_PumpMotLockedRotFault */
-    {0xD00641UL, 0xA0U, 0x01U}, /* C100641 ASW_DTC_AccuPump_Err */
-    {0xD00642UL, 0x80U, 0x01U}, /* C100642 ASW_DTC_PTS_Err */
-    {0xD00643UL, 0xA0U, 0x01U}, /* C100643 ASW_DTC_PTS_Chanl_1Err */
-    {0xD00644UL, 0x80U, 0x01U}, /* C100644 ASW_DTC_PTS_Chanl_2Err */
-    {0xD00645UL, 0xA0U, 0x01U}, /* C100645 ASW_DTC_MC_OutleakFault */
-    {0xD00646UL, 0x80U, 0x01U}, /* C100646 ASW_DTC_MC_InleakFault */
-    {0xD00647UL, 0xA0U, 0x01U}, /* C100647 ASW_DTC_IMUyawrateSignalErrLevel */
-    {0xD00648UL, 0x80U, 0x01U}, /* C100648 ASW_DTC_IMUaySignalErrLevel */
-    {0xD00649UL, 0xA0U, 0x01U}, /* C100649 ASW_DTC_IMUaxSignalErrLevel */
-    {0xD00650UL, 0x80U, 0x01U}, /* C100650 ASW_DTC_SASSignalErrLevel */
-    {0xD00651UL, 0xA0U, 0x01U}, /* C100651 ASW_DTC_BrkConValveDriverFault */
-    {0xD00652UL, 0x80U, 0x01U}, /* C100652 ASW_DTC_WhelPrsConValveDriverFault */
-    {0xD00653UL, 0xA0U, 0x01U}, /* C100653 ASW_DTC_ISV1_Fault */
-    {0xD00654UL, 0x80U, 0x01U}, /* C100654 ASW_DTC_ISV1_OverTempWarn */
-    {0xD00655UL, 0xA0U, 0x01U}, /* C100655 ASW_DTC_ISV2_Fault */
-    {0xD00656UL, 0x80U, 0x01U}, /* C100656 ASW_DTC_ISV2_OverTempWarn */
-    {0xD00657UL, 0xA0U, 0x01U}, /* C100657 ASW_DTC_ISV3_Fault */
-    {0xD00658UL, 0x80U, 0x01U}, /* C100658 ASW_DTC_ISV3_OverTempWarn */
-    {0xD00659UL, 0xA0U, 0x01U}, /* C100659 ASW_DTC_ISV4_Fault */
-    {0xD00660UL, 0x80U, 0x01U}, /* C100660 ASW_DTC_ISV4_OverTempWarn */
-    {0xD00661UL, 0xA0U, 0x01U}, /* C100661 ASW_DTC_PAV_Fault */
-    {0xD00662UL, 0x80U, 0x01U}, /* C100662 ASW_DTC_PAV_OverTempWarn */
-    {0xD00663UL, 0xA0U, 0x01U}, /* C100663 ASW_DTC_PRV_Fault */
-    {0xD00664UL, 0x80U, 0x01U}, /* C100664 ASW_DTC_PRV_OverTempWarn */
-    {0xD00665UL, 0xA0U, 0x01U}, /* C100665 ASW_DTC_BAV_Fault */
-    {0xD00666UL, 0x80U, 0x01U}, /* C100666 ASW_DTC_CSV_Fault */
-    {0xD00667UL, 0xA0U, 0x01U}, /* C100667 ASW_DTC_SSV_Fault */
-    {0xD00668UL, 0x80U, 0x01U}, /* C100668 ASW_DTC_USV_Fault */
-    {0xD00669UL, 0x80U, 0x01U}, /* C100669 ASW_DTC_SASangErr */
-    {0xD00670UL, 0xA0U, 0x01U}, /* C100670 ASW_DTC_BrkSwitchErr */
-    {0xD00671UL, 0x80U, 0x01U}, /* C100671 ASW_DTC_PowerSysErr */
-    {0xD00672UL, 0xA0U, 0x01U}, /* C100672 ASW_DTC_AccPosErr */
-    {0xD00673UL, 0x80U, 0x01U}, /* C100673 ASW_DTC_GearPosErr */
-    {0xD00674UL, 0xA0U, 0x01U}, /* C100674 ASW_DTC_BtrErr */
-    {0xD00675UL, 0x80U, 0x01U}, /* C100675 ASW_DTC_BrkFluidLevel_Low */
-    {0xD00676UL, 0xA0U, 0x01U}, /* C100676 ASW_DTC_SeatBltErr */
-    {0xD00677UL, 0x80U, 0x01U}, /* C100677 ASW_DTC_DoorsErr */
-    {0xD00678UL, 0xA0U, 0x01U}, /* C100678 ASW_DTC_AdasConnectErr */
-    {0xD00679UL, 0x80U, 0x01U}, /* C100679 ASW_DTC_ExternalEPBErr */
-};
-
 void uds_dtc_app_init(void) {
     memset(&s_dtc_storage, 0, sizeof(s_dtc_storage));
     s_dtc_storage.status_availability_mask = 0xFFU;
+    s_dtc_storage.dynamic_count = 0U;
 
-    /* Populate 66 OEM DTC records */
-    for (uint8_t i = 0U; i < UDS_DTC_OEM_COUNT; ++i) {
-        s_dtc_storage.records[i].dtc_number = s_oem_dtc_defs[i].dtc_number;
-        s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
-        s_dtc_storage.records[i].severity = s_oem_dtc_defs[i].severity;
-        s_dtc_storage.records[i].functional_unit = s_oem_dtc_defs[i].functional_unit;
-        s_dtc_storage.records[i].fault_counter = 0;
-        s_dtc_storage.records[i].occurrence_counter = 0U;
-        s_dtc_storage.records[i].aging_counter = 0U;
-        s_dtc_storage.records[i].snapshot_length = 0U;
-        s_dtc_storage.records[i].extended_length = 0U;
-        s_dtc_storage.records[i].active = false;
+    /* Initialize static status from ROM defaults */
+    for (uint8_t i = 0U; i < UDS_DTC_STATIC_COUNT; ++i) {
+        s_dtc_storage.static_status[i].status_byte = s_rom_dtc_defs[i].default_status;
+        s_dtc_storage.static_status[i].fault_counter = s_rom_dtc_defs[i].default_fault_counter;
+        s_dtc_storage.static_status[i].occurrence_counter =
+            s_rom_dtc_defs[i].default_occurrence_counter;
+        s_dtc_storage.static_status[i].aging_counter = s_rom_dtc_defs[i].default_aging_counter;
+        s_dtc_storage.static_status[i].active = s_rom_dtc_defs[i].default_active;
     }
-    s_dtc_storage.record_count = UDS_DTC_OEM_COUNT;
-
-    /* Baseline DTC 1: P0100 - Mass Air Flow Sensor A Circuit (0x010000) */
-    uint8_t b1 = s_dtc_storage.record_count++;
-    s_dtc_storage.records[b1].dtc_number = 0x010000UL;
-    s_dtc_storage.records[b1].status_byte = 0x2FU; /* Confirmed, pending, test failed */
-    s_dtc_storage.records[b1].severity = 0x40U;    /* Check at next halt */
-    s_dtc_storage.records[b1].functional_unit = 0x01U;
-    s_dtc_storage.records[b1].fault_counter = 127;
-    s_dtc_storage.records[b1].occurrence_counter = 5U;
-    s_dtc_storage.records[b1].aging_counter = 0x28U;
-    s_dtc_storage.records[b1].snapshot_length = 4U;
-    s_dtc_storage.records[b1].snapshot_data[0] = 0x0CU; /* Engine RPM: 3072 */
-    s_dtc_storage.records[b1].snapshot_data[1] = 0x00U;
-    s_dtc_storage.records[b1].snapshot_data[2] = 0x32U; /* Coolant Temp: 50 C */
-    s_dtc_storage.records[b1].snapshot_data[3] = 0x88U; /* Battery 13.6 V */
-    s_dtc_storage.records[b1].extended_length = 2U;
-    s_dtc_storage.records[b1].extended_data[0] = 0x05U; /* Occurrence count: 5 */
-    s_dtc_storage.records[b1].extended_data[1] = 0x28U; /* Aging counter */
-    s_dtc_storage.records[b1].active = true;
-
-    /* Baseline DTC 2: U0100 - Lost Communication with ECM/PCM (0xC10000) */
-    uint8_t b2 = s_dtc_storage.record_count++;
-    s_dtc_storage.records[b2].dtc_number = 0xC10000UL;
-    s_dtc_storage.records[b2].status_byte = 0x08U; /* Confirmed */
-    s_dtc_storage.records[b2].severity = 0x80U;    /* Immediate check */
-    s_dtc_storage.records[b2].functional_unit = 0x02U;
-    s_dtc_storage.records[b2].fault_counter = 50;
-    s_dtc_storage.records[b2].occurrence_counter = 1U;
-    s_dtc_storage.records[b2].aging_counter = 0x28U;
-    s_dtc_storage.records[b2].snapshot_length = 2U;
-    s_dtc_storage.records[b2].snapshot_data[0] = 0x00U;
-    s_dtc_storage.records[b2].snapshot_data[1] = 0x00U;
-    s_dtc_storage.records[b2].extended_length = 2U;
-    s_dtc_storage.records[b2].extended_data[0] = 0x01U;
-    s_dtc_storage.records[b2].extended_data[1] = 0x28U;
-    s_dtc_storage.records[b2].active = true;
-
-    /* Baseline DTC 3: B0001 - Driver Airbag Deployment Loop (0x800100) */
-    uint8_t b3 = s_dtc_storage.record_count++;
-    s_dtc_storage.records[b3].dtc_number = 0x800100UL;
-    s_dtc_storage.records[b3].status_byte = 0x01U; /* Test failed */
-    s_dtc_storage.records[b3].severity = 0xA0U;    /* Maintenance immediately */
-    s_dtc_storage.records[b3].functional_unit = 0x03U;
-    s_dtc_storage.records[b3].fault_counter = 10;
-    s_dtc_storage.records[b3].occurrence_counter = 2U;
-    s_dtc_storage.records[b3].aging_counter = 0x28U;
-    s_dtc_storage.records[b3].snapshot_length = 2U;
-    s_dtc_storage.records[b3].snapshot_data[0] = 0x12U;
-    s_dtc_storage.records[b3].snapshot_data[1] = 0x34U;
-    s_dtc_storage.records[b3].extended_length = 2U;
-    s_dtc_storage.records[b3].extended_data[0] = 0x02U;
-    s_dtc_storage.records[b3].extended_data[1] = 0x28U;
-    s_dtc_storage.records[b3].active = true;
 
     /* Enable all subfunctions capability bits */
     s_dtc_storage.backend.capabilities = 0x03FFFFFFUL;
@@ -605,13 +746,17 @@ const UdsDtcBackend *uds_dtc_app_get_backend(void) {
 UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
     (void)context;
     bool cleared_any = false;
+    uint8_t total_count = get_total_record_count();
 
     if (group_of_dtc == 0xFFFFFFUL) {
         /* Clear all DTCs - set to 0x50 per AUTOSAR Dem specification */
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            s_dtc_storage.records[i].active = false;
-            s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
-            s_dtc_storage.records[i].fault_counter = 0;
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcRamStatus *ram = get_dtc_ram_status(i);
+            if (ram != NULL) {
+                ram->active = false;
+                ram->status_byte = UDS_DTC_STATUS_CLEARED;
+                ram->fault_counter = 0;
+            }
         }
         (void)uds_dtc_app_save_to_nvm();
         return UDS_RESULT_OK;
@@ -623,8 +768,10 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
         ((group_of_dtc & 0x00FFFFUL) == 0x000000UL) || ((group_of_dtc & 0x00FFFFUL) == 0x00FF00UL);
 
     if (is_group_mask) {
-        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-            uint32_t dtc = s_dtc_storage.records[i].dtc_number;
+        for (uint8_t i = 0U; i < total_count; ++i) {
+            UdsDtcAppRecord rec;
+            (void)get_dtc_record(i, &rec);
+            uint32_t dtc = rec.dtc_number;
             bool match = false;
             if ((group_high == 0x000000UL) && (dtc < 0x400000UL)) {
                 match = true; /* Powertrain */
@@ -636,9 +783,12 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
                 match = true; /* Network Communication */
             }
             if (match) {
-                s_dtc_storage.records[i].active = false;
-                s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
-                s_dtc_storage.records[i].fault_counter = 0;
+                UdsDtcRamStatus *ram = get_dtc_ram_status(i);
+                if (ram != NULL) {
+                    ram->active = false;
+                    ram->status_byte = UDS_DTC_STATUS_CLEARED;
+                    ram->fault_counter = 0;
+                }
                 cleared_any = true;
             }
         }
@@ -649,48 +799,49 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc) {
     }
 
     /* Match individual DTC */
-    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-        if (s_dtc_storage.records[i].dtc_number == group_of_dtc) {
-            s_dtc_storage.records[i].active = false;
-            s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
-            s_dtc_storage.records[i].fault_counter = 0;
-            (void)uds_dtc_app_save_to_nvm();
-            return UDS_RESULT_OK;
+    int16_t idx = find_dtc_index(group_of_dtc);
+    if (idx >= 0) {
+        UdsDtcRamStatus *ram = get_dtc_ram_status((uint8_t)idx);
+        if (ram != NULL) {
+            ram->active = false;
+            ram->status_byte = UDS_DTC_STATUS_CLEARED;
+            ram->fault_counter = 0;
         }
+        (void)uds_dtc_app_save_to_nvm();
+        return UDS_RESULT_OK;
     }
     return UDS_RESULT_OUT_OF_RANGE;
 }
 
 bool uds_dtc_app_set_fault(uint32_t dtc, uint8_t status, uint8_t severity, int8_t counter) {
-    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-        if (s_dtc_storage.records[i].dtc_number == dtc) {
-            s_dtc_storage.records[i].active = true;
-            s_dtc_storage.records[i].status_byte = status;
-            s_dtc_storage.records[i].severity = severity;
-            s_dtc_storage.records[i].fault_counter = counter;
+    int16_t idx = find_dtc_index(dtc);
+    if (idx >= 0) {
+        UdsDtcRamStatus *ram = get_dtc_ram_status((uint8_t)idx);
+        if (ram != NULL) {
+            ram->active = true;
+            ram->status_byte = status;
+            ram->fault_counter = counter;
             if ((status & UDS_DTC_STATUS_TEST_FAILED) != 0U) {
-                if (s_dtc_storage.records[i].occurrence_counter < 255U) {
-                    s_dtc_storage.records[i].occurrence_counter++;
+                if (ram->occurrence_counter < 255U) {
+                    ram->occurrence_counter++;
                 }
-                s_dtc_storage.records[i].aging_counter = 0U;
+                ram->aging_counter = 0U;
             }
             (void)uds_dtc_app_save_to_nvm();
             return true;
         }
     }
-    if (s_dtc_storage.record_count < UDS_DTC_APP_MAX_RECORDS) {
-        uint8_t idx = s_dtc_storage.record_count++;
-        s_dtc_storage.records[idx].dtc_number = dtc;
-        s_dtc_storage.records[idx].status_byte = status;
-        s_dtc_storage.records[idx].severity = severity;
-        s_dtc_storage.records[idx].fault_counter = counter;
-        s_dtc_storage.records[idx].functional_unit = 0x01U;
-        s_dtc_storage.records[idx].snapshot_length = 0U;
-        s_dtc_storage.records[idx].extended_length = 0U;
-        s_dtc_storage.records[idx].occurrence_counter =
+    if (s_dtc_storage.dynamic_count < UDS_DTC_DYNAMIC_MAX) {
+        uint8_t d = s_dtc_storage.dynamic_count++;
+        s_dtc_storage.dynamic_records[d].dtc_number = dtc;
+        s_dtc_storage.dynamic_records[d].severity = severity;
+        s_dtc_storage.dynamic_records[d].functional_unit = 0x01U;
+        s_dtc_storage.dynamic_records[d].status.status_byte = status;
+        s_dtc_storage.dynamic_records[d].status.fault_counter = counter;
+        s_dtc_storage.dynamic_records[d].status.occurrence_counter =
             ((status & UDS_DTC_STATUS_TEST_FAILED) != 0U) ? 1U : 0U;
-        s_dtc_storage.records[idx].aging_counter = 0U;
-        s_dtc_storage.records[idx].active = true;
+        s_dtc_storage.dynamic_records[d].status.aging_counter = 0U;
+        s_dtc_storage.dynamic_records[d].status.active = true;
         (void)uds_dtc_app_save_to_nvm();
         return true;
     }
@@ -698,10 +849,12 @@ bool uds_dtc_app_set_fault(uint32_t dtc, uint8_t status, uint8_t severity, int8_
 }
 
 bool uds_dtc_app_clear_fault(uint32_t dtc) {
-    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-        if (s_dtc_storage.records[i].dtc_number == dtc) {
-            s_dtc_storage.records[i].active = false;
-            s_dtc_storage.records[i].status_byte = UDS_DTC_STATUS_CLEARED;
+    int16_t idx = find_dtc_index(dtc);
+    if (idx >= 0) {
+        UdsDtcRamStatus *ram = get_dtc_ram_status((uint8_t)idx);
+        if (ram != NULL) {
+            ram->active = false;
+            ram->status_byte = UDS_DTC_STATUS_CLEARED;
             (void)uds_dtc_app_save_to_nvm();
             return true;
         }
@@ -711,9 +864,10 @@ bool uds_dtc_app_clear_fault(uint32_t dtc) {
 
 /* AUTOSAR Dem counter-based fault debouncing engine */
 bool uds_dtc_app_report_event(uint32_t dtc, bool failed) {
-    for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
-        if (s_dtc_storage.records[i].dtc_number == dtc) {
-            UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+    int16_t idx = find_dtc_index(dtc);
+    if (idx >= 0) {
+        UdsDtcRamStatus *rec = get_dtc_ram_status((uint8_t)idx);
+        if (rec != NULL) {
             if (failed) {
                 if (rec->fault_counter <= (127 - 16)) {
                     rec->fault_counter = (int8_t)(rec->fault_counter + 16);

@@ -29,6 +29,43 @@
 #define UDS_DTC_EXT_DATA_OCCURRENCES 0x01U   /* Fault occurrence counter */
 #define UDS_DTC_EXT_DATA_AGING_COUNTER 0x02U /* Consecutive unfailed cycles */
 
+#define UDS_DTC_STATIC_COUNT 69U
+#define UDS_DTC_DYNAMIC_MAX (UDS_DTC_APP_MAX_RECORDS - UDS_DTC_STATIC_COUNT)
+
+/* Static ROM definition for pre-configured OEM and baseline DTCs */
+typedef struct {
+    uint32_t dtc_number;     /* 24-bit diagnostic trouble code identifier */
+    uint8_t severity;        /* DTC severity mask */
+    uint8_t functional_unit; /* Functional unit */
+    uint8_t default_status;  /* Initial status byte */
+    int8_t default_fault_counter;
+    uint8_t default_occurrence_counter;
+    uint8_t default_aging_counter;
+    bool default_active;
+    const uint8_t *snapshot_data;
+    uint8_t snapshot_length;
+    const uint8_t *extended_data;
+    uint8_t extended_length;
+} UdsDtcRomDef;
+
+/* Compact runtime status stored in SRAM (5 bytes per DTC) */
+typedef struct {
+    uint8_t status_byte;        /* ISO 14229-1 status mask bitfield */
+    int8_t fault_counter;       /* Fault detection counter (-128 to 127) */
+    uint8_t occurrence_counter; /* Fault occurrence counter */
+    uint8_t aging_counter;      /* Aging counter */
+    bool active;
+} UdsDtcRamStatus;
+
+/* Dynamic record for runtime-registered DTCs not present in ROM */
+typedef struct {
+    uint32_t dtc_number;
+    uint8_t severity;
+    uint8_t functional_unit;
+    UdsDtcRamStatus status;
+} UdsDtcDynamicRecord;
+
+/* Transient composite record view used during query and reporting */
 typedef struct {
     uint32_t dtc_number;        /* 24-bit diagnostic trouble code identifier */
     uint8_t status_byte;        /* ISO 14229-1 status mask bitfield */
@@ -37,9 +74,9 @@ typedef struct {
     int8_t fault_counter;       /* Fault detection counter (-128 to 127) */
     uint8_t occurrence_counter; /* Fault occurrence counter */
     uint8_t aging_counter;      /* Aging counter */
-    uint8_t snapshot_data[UDS_DTC_APP_SNAPSHOT_SIZE];
+    const uint8_t *snapshot_data;
     uint8_t snapshot_length;
-    uint8_t extended_data[UDS_DTC_APP_EXTENDED_SIZE];
+    const uint8_t *extended_data;
     uint8_t extended_length;
     bool active;
 } UdsDtcAppRecord;
@@ -47,8 +84,9 @@ typedef struct {
 typedef struct {
     UdsDtcBackend backend;
     uint8_t status_availability_mask;
-    UdsDtcAppRecord records[UDS_DTC_APP_MAX_RECORDS];
-    uint8_t record_count;
+    UdsDtcRamStatus static_status[UDS_DTC_STATIC_COUNT];
+    UdsDtcDynamicRecord dynamic_records[UDS_DTC_DYNAMIC_MAX];
+    uint8_t dynamic_count;
     UdsParamStore *nvm_store;
 } UdsDtcAppStorage;
 

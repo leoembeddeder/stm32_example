@@ -42,10 +42,10 @@ typedef UdsCallbackResult (*UdsDtcReportFn)(void *context, uint8_t subfunction,
                                             uint8_t *response, uint16_t *response_length,
                                             uint16_t response_capacity);
 
-typedef struct UdsDtcBackend {
+struct UdsDtcBackend {
     uint32_t capabilities;
     UdsDtcReportFn report;
-} UdsDtcBackend;
+};
 
 bool uds_dtc_subfunction_supported(uint8_t subfunction);
 bool uds_dtc_request_length_valid(uint8_t subfunction, uint16_t request_length);

@@ -115,6 +115,7 @@ uint32_t uds_bootloader_get_active_version(void);
 uint32_t uds_bootloader_get_active_slot(void);
 bool uds_bootloader_is_activation_pending(void);
 bool uds_bootloader_is_application_valid(uint32_t app_vector_addr);
+UdsDownloadResult uds_bootloader_activate_candidate(void);
 
 /* Flash Operations & Image Integrity Verification */
 UdsDownloadResult uds_bootloader_flash_verify(const UdsDownloadMetadata *metadata,
