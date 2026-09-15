@@ -397,12 +397,12 @@ static void test_iso_0x23_examples_and_nrc(void) {
            response[4] == 0xEFU);
     server.security_level = 0U;
 
-    /* 12. Session check: in Default Session (0x01) -> NRC 0x7E */
+    /* 12. Session check: in Default Session (0x01) -> NRC 0x7F */
     assert(uds_server_request_session(&server, UDS_SESSION_DEFAULT, 1000U) == UDS_RESULT_OK);
     assert(uds_server_handle_addressed(&server, req_ex2, sizeof(req_ex2), response, &resp_len,
                                        sizeof(response), UDS_ADDRESS_PHYSICAL,
                                        1000U) == UDS_RESULT_OK);
-    assert(response[0] == 0x7FU && response[1] == 0x23U && response[2] == 0x7EU);
+    assert(response[0] == 0x7FU && response[1] == 0x23U && response[2] == 0x7FU);
 
     /* 13. Functional addressing suppression */
     assert(uds_server_handle_addressed(&server, req_ex2, sizeof(req_ex2), response, &resp_len,
@@ -546,12 +546,12 @@ static void test_iso_0x3D_examples_and_nrc(void) {
     assert(response[0] == 0x7FU && response[1] == 0x3DU && response[2] == 0x72U);
     s_fail_flash_write = false;
 
-    /* 11. NRC 0x7E: In Default Session -> rejected */
+    /* 11. NRC 0x7F: In Default Session -> rejected */
     assert(uds_server_request_session(&server, UDS_SESSION_DEFAULT, 1000U) == UDS_RESULT_OK);
     assert(uds_server_handle_addressed(&server, req_ex3d_1, sizeof(req_ex3d_1), response, &resp_len,
                                        sizeof(response), UDS_ADDRESS_PHYSICAL,
                                        1000U) == UDS_RESULT_OK);
-    assert(response[0] == 0x7FU && response[1] == 0x3DU && response[2] == 0x7EU);
+    assert(response[0] == 0x7FU && response[1] == 0x3DU && response[2] == 0x7FU);
 }
 
 static void test_uds_memory_app_integration(void) {
