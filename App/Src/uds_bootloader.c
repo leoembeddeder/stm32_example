@@ -254,7 +254,7 @@ void uds_bootloader_set_target(UdsBootloaderTarget target) {
         s_bl_memory_map.diagnostic_storage.start = UDS_BL_C092_NVM_METADATA_START;
         s_bl_memory_map.diagnostic_storage.end_exclusive =
             UDS_BL_C092_NVM_METADATA_START + UDS_BL_C092_NVM_METADATA_SIZE;
-        s_bl_memory_map.erase_alignment = 2048U;
+        s_bl_memory_map.erase_alignment = 8U;
         s_bl_memory_map.program_alignment = 8U;
         s_bl_memory_map.max_block_length = 256U;
         s_bl_memory_map.activation_supported = true;

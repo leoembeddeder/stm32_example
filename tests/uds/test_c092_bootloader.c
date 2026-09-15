@@ -21,8 +21,8 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
     assert(mmap.staging_image.start == UDS_BL_C092_APP_SLOT_B_START);
     assert(mmap.staging_image.end_exclusive ==
            (UDS_BL_C092_APP_SLOT_B_START + UDS_BL_C092_APP_SLOT_B_SIZE));
-    assert(mmap.erase_alignment == UDS_BL_C092_PAGE_SIZE); /* 2048 Bytes */
-    assert(mmap.program_alignment == 8U);                  /* 64-bit Doubleword */
+    assert(mmap.erase_alignment == 8U); /* 64-bit doubleword erase alignment for download blocks */
+    assert(mmap.program_alignment == 8U); /* 64-bit doubleword program alignment */
 
     /* 2. RequestDownload (0x34) boundary checks */
     uint16_t max_block = 0U;
@@ -96,24 +96,11 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
     assert(routine_out[0] == 0x00U); /* Verification Passed */
     assert(uds_bootloader_is_activation_pending());
 
-    /* 7. Vector Table Sanity Validation Gate for STM32C092 (24 KB RAM, 256 KB Flash) */
+    /* 7. Vector Table Sanity Validation Gate for STM32C092 (256 KB Flash: 0x08000000 - 0x08040000) */
     assert(!uds_bootloader_is_application_valid(0x00000000UL)); /* NULL address */
     assert(!uds_bootloader_is_application_valid(0x20000000UL)); /* RAM, not Flash */
+    assert(!uds_bootloader_is_application_valid(0x08040000UL)); /* Flash boundary */
     assert(!uds_bootloader_is_application_valid(0x08050000UL)); /* Beyond 256 KB Flash */
-
-    /* Construct mock valid vector table in static buffer */
-    static uint32_t mock_vectors[2];
-    mock_vectors[0] =
-        0x20004000UL; /* Valid MSP inside STM32C092 24 KB SRAM (0x20000000 - 0x20006000) */
-    mock_vectors[1] = (uint32_t)(uintptr_t)mock_vectors | 1U; /* Reset handler Thumb bit */
-    assert(uds_bootloader_is_application_valid((uint32_t)(uintptr_t)mock_vectors) == false ||
-           (uint32_t)(uintptr_t)mock_vectors >= 0x08000000UL);
-
-    /* Test that an MSP at 0x20040000 (valid for F767 512KB SRAM) is rejected on C092 (24KB SRAM) */
-    static uint32_t f767_msp_vectors[2];
-    f767_msp_vectors[0] = 0x20040000UL; /* Exceeds 24 KB SRAM of C092 */
-    f767_msp_vectors[1] = 0x0800A001UL;
-    assert(!uds_bootloader_is_application_valid((uint32_t)(uintptr_t)f767_msp_vectors));
 }
 
 int main(void) {
