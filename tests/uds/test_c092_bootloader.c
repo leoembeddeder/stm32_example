@@ -101,6 +101,8 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
     assert(!uds_bootloader_is_application_valid(0x20000000UL)); /* RAM, not Flash */
     assert(!uds_bootloader_is_application_valid(0x08040000UL)); /* Flash boundary */
     assert(!uds_bootloader_is_application_valid(0x08050000UL)); /* Beyond 256 KB Flash */
+    assert(!uds_bootloader_is_application_valid(
+        0x0800A004UL)); /* Unaligned VTOR (not 256-byte aligned) */
 }
 
 int main(void) {

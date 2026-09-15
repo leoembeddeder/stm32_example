@@ -497,6 +497,12 @@ bool uds_bootloader_is_application_valid(uint32_t app_vector_addr) {
     if ((app_vector_addr < flash_base) || (app_vector_addr >= flash_end)) {
         return false;
     }
+
+    /* Hardware VTOR alignment: 256-byte aligned on Cortex-M0+, 512-byte aligned on Cortex-M7 */
+    uint32_t vtor_alignment_mask = (s_bl_ctx.target == UDS_BL_TARGET_STM32C092) ? 0xFFU : 0x1FFU;
+    if ((app_vector_addr & vtor_alignment_mask) != 0U) {
+        return false;
+    }
     const uint32_t *vectors = (const uint32_t *)(uintptr_t)app_vector_addr;
     uint32_t initial_msp = vectors[0];
     uint32_t reset_handler = vectors[1];
