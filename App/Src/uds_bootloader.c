@@ -1,6 +1,6 @@
 #include "uds_bootloader.h"
 
-#if defined(USE_HAL_DRIVER) || defined(STM32F767xx)
+#if defined(USE_HAL_DRIVER) || defined(STM32F767xx) || defined(STM32C092xx)
 #include "main.h"
 #endif
 #include <string.h>
@@ -98,35 +98,32 @@ static void sha256_update(Sha256Ctx *ctx, const uint8_t *data, size_t len) {
 }
 
 static void sha256_final(Sha256Ctx *ctx, uint8_t *digest) {
+    uint64_t total_bits = ctx->count * 8U;
     size_t buffer_idx = (size_t)(ctx->count & 0x3FU);
     ctx->buffer[buffer_idx++] = 0x80U;
+
     if (buffer_idx > 56U) {
-        while (buffer_idx < 64U) {
-            ctx->buffer[buffer_idx++] = 0x00U;
-        }
+        (void)memset(&ctx->buffer[buffer_idx], 0, 64U - buffer_idx);
         sha256_transform(ctx, ctx->buffer);
         buffer_idx = 0U;
     }
-    while (buffer_idx < 56U) {
-        ctx->buffer[buffer_idx++] = 0x00U;
-    }
-    uint64_t total_bits = ctx->count * 8U;
+    (void)memset(&ctx->buffer[buffer_idx], 0, 56U - buffer_idx);
     for (uint8_t i = 0U; i < 8U; ++i) {
-        ctx->buffer[56U + i] = (uint8_t)(total_bits >> (56U - i * 8U));
+        ctx->buffer[56U + i] = (uint8_t)((total_bits >> (56U - i * 8U)) & 0xFFU);
     }
     sha256_transform(ctx, ctx->buffer);
+
     for (uint8_t i = 0U; i < 8U; ++i) {
-        digest[i * 4U] = (uint8_t)(ctx->state[i] >> 24U);
-        digest[i * 4U + 1U] = (uint8_t)(ctx->state[i] >> 16U);
-        digest[i * 4U + 2U] = (uint8_t)(ctx->state[i] >> 8U);
-        digest[i * 4U + 3U] = (uint8_t)ctx->state[i];
+        digest[i * 4U] = (uint8_t)((ctx->state[i] >> 24U) & 0xFFU);
+        digest[i * 4U + 1U] = (uint8_t)((ctx->state[i] >> 16U) & 0xFFU);
+        digest[i * 4U + 2U] = (uint8_t)((ctx->state[i] >> 8U) & 0xFFU);
+        digest[i * 4U + 3U] = (uint8_t)(ctx->state[i] & 0xFFU);
     }
 }
 
-/* Bootloader state and memory context */
 static UdsBootloaderContext s_bl_ctx;
-static UdsDownload s_bl_download;
 static UdsDownloadMemoryMap s_bl_memory_map;
+static UdsDownload s_bl_download;
 
 static UdsDownloadResult bootloader_flash_erase_start(void *context, uint32_t address,
                                                       uint32_t length) {
@@ -134,6 +131,7 @@ static UdsDownloadResult bootloader_flash_erase_start(void *context, uint32_t ad
     (void)address;
     (void)length;
 #if defined(HAL_FLASH_MODULE_ENABLED)
+#if defined(STM32F767xx)
     HAL_FLASH_Unlock();
     FLASH_EraseInitTypeDef erase_init;
     erase_init.TypeErase = FLASH_TYPEERASE_SECTORS;
@@ -146,6 +144,23 @@ static UdsDownloadResult bootloader_flash_erase_start(void *context, uint32_t ad
         return UDS_DOWNLOAD_ERASE_ERROR;
     }
     HAL_FLASH_Lock();
+#elif defined(STM32C092xx) || defined(STM32C0xx)
+    HAL_FLASH_Unlock();
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+    uint32_t page_index = (address - 0x08000000U) / 2048U;
+    uint32_t nb_pages = (length + 2047U) / 2048U;
+    FLASH_EraseInitTypeDef erase_init;
+    (void)memset(&erase_init, 0, sizeof(erase_init));
+    erase_init.TypeErase = FLASH_TYPEERASE_PAGES;
+    erase_init.Page = page_index;
+    erase_init.NbPages = nb_pages;
+    uint32_t page_error = 0U;
+    if (HAL_FLASHEx_Erase(&erase_init, &page_error) != HAL_OK) {
+        HAL_FLASH_Lock();
+        return UDS_DOWNLOAD_ERASE_ERROR;
+    }
+    HAL_FLASH_Lock();
+#endif
 #endif
     return UDS_DOWNLOAD_OK;
 }
@@ -160,6 +175,7 @@ static UdsDownloadResult bootloader_flash_program(void *context, uint32_t addres
     (void)context;
 #if defined(HAL_FLASH_MODULE_ENABLED)
     HAL_FLASH_Unlock();
+#if defined(STM32F767xx)
     for (uint32_t i = 0U; i < (uint32_t)length; i += 4U) {
         uint32_t word = 0xFFFFFFFFUL;
         size_t chunk_len = ((uint32_t)length - i < 4U) ? (size_t)((uint32_t)length - i) : 4U;
@@ -169,6 +185,27 @@ static UdsDownloadResult bootloader_flash_program(void *context, uint32_t addres
             return UDS_DOWNLOAD_PROGRAM_ERROR;
         }
     }
+#elif defined(STM32C092xx) || defined(STM32C0xx)
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+    size_t i = 0U;
+    while ((i + 8U) <= (size_t)length) {
+        uint64_t dword_val = 0U;
+        (void)memcpy(&dword_val, &data[i], 8U);
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address + i, dword_val) != HAL_OK) {
+            HAL_FLASH_Lock();
+            return UDS_DOWNLOAD_PROGRAM_ERROR;
+        }
+        i += 8U;
+    }
+    if (i < (size_t)length) {
+        uint64_t dword_val = 0xFFFFFFFFFFFFFFFFULL;
+        (void)memcpy(&dword_val, &data[i], (size_t)length - i);
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address + i, dword_val) != HAL_OK) {
+            HAL_FLASH_Lock();
+            return UDS_DOWNLOAD_PROGRAM_ERROR;
+        }
+    }
+#endif
     HAL_FLASH_Lock();
 #else
     (void)address;
@@ -187,32 +224,65 @@ static UdsDownloadResult bootloader_flash_verify(void *context, const UdsDownloa
     return UDS_DOWNLOAD_OK;
 }
 
-void uds_bootloader_init(void) {
-    s_bl_ctx.active_version = 1U; /* Monotonic firmware version counter */
-    s_bl_ctx.active_slot_addr = UDS_BL_APP_SLOT_A_START;
-    s_bl_ctx.target_slot_addr = UDS_BL_APP_SLOT_B_START;
+void uds_bootloader_set_target(UdsBootloaderTarget target) {
+    s_bl_ctx.target = target;
+    s_bl_ctx.active_version = 1U;
     s_bl_ctx.download_in_progress = false;
     s_bl_ctx.candidate_verified = false;
     s_bl_ctx.last_erase_result = 0x00U;
     s_bl_ctx.last_check_memory_result = 0x01U;
     (void)memset(&s_bl_ctx.staging_metadata, 0, sizeof(s_bl_ctx.staging_metadata));
 
-    /* Configure download memory map */
-    s_bl_memory_map.staging_image.start = UDS_BL_APP_SLOT_B_START;
-    s_bl_memory_map.staging_image.end_exclusive = UDS_BL_APP_SLOT_B_START + UDS_BL_APP_SLOT_B_SIZE;
-    s_bl_memory_map.bootloader.start = UDS_BL_BOOTLOADER_START;
-    s_bl_memory_map.bootloader.end_exclusive = UDS_BL_BOOTLOADER_START + UDS_BL_BOOTLOADER_SIZE;
-    s_bl_memory_map.active_application.start = UDS_BL_APP_SLOT_A_START;
-    s_bl_memory_map.active_application.end_exclusive =
-        UDS_BL_APP_SLOT_A_START + UDS_BL_APP_SLOT_A_SIZE;
-    s_bl_memory_map.persistent_storage.start = UDS_BL_NVM_METADATA_START;
-    s_bl_memory_map.persistent_storage.end_exclusive = UDS_BL_NVM_METADATA_START + 0x8000UL;
-    s_bl_memory_map.diagnostic_storage.start = UDS_BL_NVM_METADATA_START + 0x8000UL;
-    s_bl_memory_map.diagnostic_storage.end_exclusive = UDS_BL_APP_SLOT_A_START;
-    s_bl_memory_map.erase_alignment = 4U;
-    s_bl_memory_map.program_alignment = 4U;
-    s_bl_memory_map.max_block_length = 256U;
-    s_bl_memory_map.activation_supported = true;
+    if (target == UDS_BL_TARGET_STM32C092) {
+        s_bl_ctx.active_slot_addr = UDS_BL_C092_APP_SLOT_A_START;
+        s_bl_ctx.active_slot_size = UDS_BL_C092_APP_SLOT_A_SIZE;
+        s_bl_ctx.target_slot_addr = UDS_BL_C092_APP_SLOT_B_START;
+        s_bl_ctx.target_slot_size = UDS_BL_C092_APP_SLOT_B_SIZE;
+
+        s_bl_memory_map.staging_image.start = UDS_BL_C092_APP_SLOT_B_START;
+        s_bl_memory_map.staging_image.end_exclusive =
+            UDS_BL_C092_APP_SLOT_B_START + UDS_BL_C092_APP_SLOT_B_SIZE;
+        s_bl_memory_map.bootloader.start = UDS_BL_C092_BOOTLOADER_START;
+        s_bl_memory_map.bootloader.end_exclusive =
+            UDS_BL_C092_BOOTLOADER_START + UDS_BL_C092_BOOTLOADER_SIZE;
+        s_bl_memory_map.active_application.start = UDS_BL_C092_APP_SLOT_A_START;
+        s_bl_memory_map.active_application.end_exclusive =
+            UDS_BL_C092_APP_SLOT_A_START + UDS_BL_C092_APP_SLOT_A_SIZE;
+        s_bl_memory_map.persistent_storage.start = UDS_BL_C092_NVM_METADATA_START;
+        s_bl_memory_map.persistent_storage.end_exclusive =
+            UDS_BL_C092_NVM_METADATA_START + UDS_BL_C092_NVM_METADATA_SIZE;
+        s_bl_memory_map.diagnostic_storage.start = UDS_BL_C092_NVM_METADATA_START;
+        s_bl_memory_map.diagnostic_storage.end_exclusive =
+            UDS_BL_C092_NVM_METADATA_START + UDS_BL_C092_NVM_METADATA_SIZE;
+        s_bl_memory_map.erase_alignment = 2048U;
+        s_bl_memory_map.program_alignment = 8U;
+        s_bl_memory_map.max_block_length = 256U;
+        s_bl_memory_map.activation_supported = true;
+    } else {
+        s_bl_ctx.active_slot_addr = UDS_BL_F767_APP_SLOT_A_START;
+        s_bl_ctx.active_slot_size = UDS_BL_F767_APP_SLOT_A_SIZE;
+        s_bl_ctx.target_slot_addr = UDS_BL_F767_APP_SLOT_B_START;
+        s_bl_ctx.target_slot_size = UDS_BL_F767_APP_SLOT_B_SIZE;
+
+        s_bl_memory_map.staging_image.start = UDS_BL_F767_APP_SLOT_B_START;
+        s_bl_memory_map.staging_image.end_exclusive =
+            UDS_BL_F767_APP_SLOT_B_START + UDS_BL_F767_APP_SLOT_B_SIZE;
+        s_bl_memory_map.bootloader.start = UDS_BL_F767_BOOTLOADER_START;
+        s_bl_memory_map.bootloader.end_exclusive =
+            UDS_BL_F767_BOOTLOADER_START + UDS_BL_F767_BOOTLOADER_SIZE;
+        s_bl_memory_map.active_application.start = UDS_BL_F767_APP_SLOT_A_START;
+        s_bl_memory_map.active_application.end_exclusive =
+            UDS_BL_F767_APP_SLOT_A_START + UDS_BL_F767_APP_SLOT_A_SIZE;
+        s_bl_memory_map.persistent_storage.start = UDS_BL_F767_NVM_METADATA_START;
+        s_bl_memory_map.persistent_storage.end_exclusive =
+            UDS_BL_F767_NVM_METADATA_START + 0x8000UL;
+        s_bl_memory_map.diagnostic_storage.start = UDS_BL_F767_NVM_METADATA_START + 0x8000UL;
+        s_bl_memory_map.diagnostic_storage.end_exclusive = UDS_BL_F767_APP_SLOT_A_START;
+        s_bl_memory_map.erase_alignment = 4U;
+        s_bl_memory_map.program_alignment = 4U;
+        s_bl_memory_map.max_block_length = 256U;
+        s_bl_memory_map.activation_supported = true;
+    }
 
     UdsDownloadCallbacks dl_callbacks = {
         .erase_start = bootloader_flash_erase_start,
@@ -223,6 +293,18 @@ void uds_bootloader_init(void) {
         .watchdog_kick = NULL,
     };
     uds_download_init(&s_bl_download, &s_bl_memory_map, &dl_callbacks, &s_bl_ctx);
+}
+
+void uds_bootloader_init(void) {
+#if defined(STM32C092xx) || defined(TARGET_STM32C092)
+    uds_bootloader_set_target(UDS_BL_TARGET_STM32C092);
+#else
+    uds_bootloader_set_target(UDS_BL_TARGET_STM32F767);
+#endif
+}
+
+UdsBootloaderTarget uds_bootloader_get_target(void) {
+    return s_bl_ctx.target;
 }
 
 UdsDownloadMemoryMap uds_bootloader_get_memory_map(void) {
@@ -249,8 +331,8 @@ UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t addres
         return UDS_RESULT_ERROR;
     }
     /* Enforce boundary check: Address must target Slot B */
-    if ((address < UDS_BL_APP_SLOT_B_START) ||
-        ((address + length) > (UDS_BL_APP_SLOT_B_START + UDS_BL_APP_SLOT_B_SIZE))) {
+    if ((address < s_bl_ctx.target_slot_addr) ||
+        ((address + length) > (s_bl_ctx.target_slot_addr + s_bl_ctx.target_slot_size))) {
         return UDS_RESULT_OUT_OF_RANGE;
     }
     UdsDownloadResult res = uds_download_begin(&s_bl_download, address, length, 0U);
@@ -326,8 +408,8 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
             return UDS_RESULT_OK;
         }
         /* Routine 0xFF00: Erase Slot B */
-        UdsDownloadResult res =
-            bootloader_flash_erase_start(NULL, UDS_BL_APP_SLOT_B_START, UDS_BL_APP_SLOT_B_SIZE);
+        UdsDownloadResult res = bootloader_flash_erase_start(NULL, s_bl_ctx.target_slot_addr,
+                                                             s_bl_ctx.target_slot_size);
         uint8_t status = (uint8_t)((res == UDS_DOWNLOAD_OK) ? 0x00U : 0x01U); /* 0x00 = success */
         s_bl_ctx.last_erase_result = status;
         out[0] = status;
@@ -344,7 +426,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
 
         /* Routine 0x0202: Verify Checksum/Hash, Anti-Rollback, and Cryptographic Signature */
         const FirmwareMetadata_t *meta =
-            (const FirmwareMetadata_t *)(uintptr_t)UDS_BL_APP_SLOT_B_START;
+            (const FirmwareMetadata_t *)(uintptr_t)s_bl_ctx.target_slot_addr;
         FirmwareMetadata_t temp_meta;
 
         if (in_len >= sizeof(FirmwareMetadata_t)) {
@@ -373,8 +455,8 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         Sha256Ctx sha;
         sha256_init(&sha);
         if (meta->image_size > sizeof(FirmwareMetadata_t)) {
-            const uint8_t *payload =
-                (const uint8_t *)(uintptr_t)(UDS_BL_APP_SLOT_B_START + sizeof(FirmwareMetadata_t));
+            const uint8_t *payload = (const uint8_t *)(uintptr_t)(s_bl_ctx.target_slot_addr +
+                                                                  sizeof(FirmwareMetadata_t));
             size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
             sha256_update(&sha, payload, payload_size);
         }
@@ -402,17 +484,25 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
 
 /* Vector Table Sanity Validation Gate (S32K144 / OpenBLT specification) */
 bool uds_bootloader_is_application_valid(uint32_t app_vector_addr) {
-    if ((app_vector_addr < UDS_BL_FLASH_BASE) ||
-        (app_vector_addr >= (UDS_BL_FLASH_BASE + 0x00200000UL))) {
+    uint32_t flash_base = (s_bl_ctx.target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_FLASH_BASE
+                                                                       : UDS_BL_F767_FLASH_BASE;
+    uint32_t flash_end = (s_bl_ctx.target == UDS_BL_TARGET_STM32C092)
+                             ? (UDS_BL_C092_FLASH_BASE + UDS_BL_C092_FLASH_SIZE)
+                             : (UDS_BL_F767_FLASH_BASE + UDS_BL_F767_FLASH_SIZE);
+    uint32_t ram_start = (s_bl_ctx.target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_RAM_START
+                                                                      : UDS_BL_F767_RAM_START;
+    uint32_t ram_end =
+        (s_bl_ctx.target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_RAM_END : UDS_BL_F767_RAM_END;
+
+    if ((app_vector_addr < flash_base) || (app_vector_addr >= flash_end)) {
         return false;
     }
     const uint32_t *vectors = (const uint32_t *)(uintptr_t)app_vector_addr;
     uint32_t initial_msp = vectors[0];
     uint32_t reset_handler = vectors[1];
 
-    /* 1. Initial MSP must be in SRAM bounds and 8-byte aligned */
-    if ((initial_msp < UDS_BL_RAM_START) || (initial_msp > UDS_BL_RAM_END) ||
-        ((initial_msp & 0x7U) != 0U)) {
+    /* 1. Initial MSP must be in SRAM bounds and aligned */
+    if ((initial_msp < ram_start) || (initial_msp > ram_end) || ((initial_msp & 0x3U) != 0U)) {
         return false;
     }
 
@@ -422,7 +512,7 @@ bool uds_bootloader_is_application_valid(uint32_t app_vector_addr) {
     }
 
     uint32_t reset_addr = reset_handler & ~1U;
-    if ((reset_addr < app_vector_addr) || (reset_addr >= (UDS_BL_FLASH_BASE + 0x00200000UL))) {
+    if ((reset_addr < app_vector_addr) || (reset_addr >= flash_end)) {
         return false;
     }
     return true;
@@ -430,9 +520,44 @@ bool uds_bootloader_is_application_valid(uint32_t app_vector_addr) {
 
 typedef void (*AppEntryFn)(void);
 
-/* Cortex-M7 Vector Jump, Barrier Synchronization & Cache Maintenance */
+/* Vector Jump, Barrier Synchronization & Cache Maintenance */
 void uds_bootloader_jump_to_app(uint32_t app_vector_addr) {
-#if defined(CORTEX_M7) || defined(STM32F767xx)
+#if defined(STM32C092xx) || defined(CORTEX_M0PLUS)
+    /* Sanity gate: Validate vector table before attempting execution */
+    if (!uds_bootloader_is_application_valid(app_vector_addr)) {
+        return;
+    }
+
+    uint32_t app_msp = *(__IO uint32_t *)(uintptr_t)app_vector_addr;
+    AppEntryFn app_entry =
+        (AppEntryFn)(uintptr_t)(*(__IO uint32_t *)(uintptr_t)(app_vector_addr + 4U));
+
+    /* 1. Disable all interrupts */
+    __disable_irq();
+
+    /* 2. Disable SysTick timer and clear pending register */
+    SysTick->CTRL = 0U;
+    SysTick->LOAD = 0U;
+    SysTick->VAL = 0U;
+
+    /* 3. Disable all peripherals & clear NVIC pending interrupts (single 32-bit register on Cortex-M0+) */
+    NVIC->ICER[0] = 0xFFFFFFFFUL;
+    NVIC->ICPR[0] = 0xFFFFFFFFUL;
+
+    /* 4. Set Vector Table Offset Register (VTOR) */
+    SCB->VTOR = app_vector_addr;
+
+    /* 5. Reset CONTROL register to Privileged Thread Mode on MSP */
+    __set_CONTROL(0U);
+
+    /* 6. Memory Synchronization Barriers */
+    __DSB();
+    __ISB();
+
+    /* 7. Set Main Stack Pointer and branch to reset handler */
+    __set_MSP(app_msp);
+    app_entry();
+#elif defined(CORTEX_M7) || defined(STM32F767xx)
     /* Sanity gate: Validate vector table before attempting execution */
     if (!uds_bootloader_is_application_valid(app_vector_addr)) {
         return;

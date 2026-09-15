@@ -7,15 +7,64 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Target Profile Selection */
+typedef enum { UDS_BL_TARGET_STM32F767 = 0, UDS_BL_TARGET_STM32C092 = 1 } UdsBootloaderTarget;
+
 /* STM32F767 2MB Dual-Bank Flash Memory Map */
-#define UDS_BL_FLASH_BASE 0x08000000UL
-#define UDS_BL_BOOTLOADER_START 0x08000000UL
-#define UDS_BL_BOOTLOADER_SIZE 0x00040000UL    /* 256 KB (Sectors 0-1) */
-#define UDS_BL_NVM_METADATA_START 0x08010000UL /* Sector 2 (32 KB) */
-#define UDS_BL_APP_SLOT_A_START 0x08040000UL   /* Active App (Sectors 4-7, 768 KB) */
-#define UDS_BL_APP_SLOT_A_SIZE 0x000C0000UL
-#define UDS_BL_APP_SLOT_B_START 0x08100000UL /* Staging Slot B (Bank 2, 1024 KB) */
-#define UDS_BL_APP_SLOT_B_SIZE 0x00100000UL
+#define UDS_BL_F767_FLASH_BASE 0x08000000UL
+#define UDS_BL_F767_FLASH_SIZE 0x00200000UL /* 2048 KB */
+#define UDS_BL_F767_BOOTLOADER_START 0x08000000UL
+#define UDS_BL_F767_BOOTLOADER_SIZE 0x00040000UL    /* 256 KB (Sectors 0-1) */
+#define UDS_BL_F767_NVM_METADATA_START 0x08010000UL /* Sector 2 (32 KB) */
+#define UDS_BL_F767_APP_SLOT_A_START 0x08040000UL   /* Active App (Sectors 4-7, 768 KB) */
+#define UDS_BL_F767_APP_SLOT_A_SIZE 0x000C0000UL
+#define UDS_BL_F767_APP_SLOT_B_START 0x08100000UL /* Staging Slot B (Bank 2, 1024 KB) */
+#define UDS_BL_F767_APP_SLOT_B_SIZE 0x00100000UL
+#define UDS_BL_F767_RAM_START 0x20000000UL
+#define UDS_BL_F767_RAM_END 0x20080000UL /* 512 KB */
+
+/* STM32C092RC 256KB Flash Memory Map (128 uniform 2 KB sectors/pages) */
+#define UDS_BL_C092_FLASH_BASE 0x08000000UL
+#define UDS_BL_C092_FLASH_SIZE 0x00040000UL /* 256 KB */
+#define UDS_BL_C092_PAGE_SIZE 0x00000800UL  /* 2048 Bytes */
+#define UDS_BL_C092_PAGE_COUNT 128U
+#define UDS_BL_C092_BOOTLOADER_START 0x08000000UL /* Pages 0-15 (32 KB) */
+#define UDS_BL_C092_BOOTLOADER_SIZE 0x00008000UL
+#define UDS_BL_C092_NVM_METADATA_START 0x08008000UL /* Pages 16-19 (8 KB) */
+#define UDS_BL_C092_NVM_METADATA_SIZE 0x00002000UL
+#define UDS_BL_C092_APP_SLOT_A_START 0x0800A000UL /* Active App (Pages 20-73, 108 KB) */
+#define UDS_BL_C092_APP_SLOT_A_SIZE 0x0001B000UL
+#define UDS_BL_C092_APP_SLOT_B_START 0x08025000UL /* Staging Slot B (Pages 74-127, 108 KB) */
+#define UDS_BL_C092_APP_SLOT_B_SIZE 0x0001B000UL
+#define UDS_BL_C092_RAM_START 0x20000000UL
+#define UDS_BL_C092_RAM_END 0x20006000UL /* 24 KB */
+
+/* Default memory map selection based on compile target */
+#if defined(STM32C092xx) || defined(TARGET_STM32C092)
+#define UDS_BL_FLASH_BASE UDS_BL_C092_FLASH_BASE
+#define UDS_BL_FLASH_SIZE UDS_BL_C092_FLASH_SIZE
+#define UDS_BL_BOOTLOADER_START UDS_BL_C092_BOOTLOADER_START
+#define UDS_BL_BOOTLOADER_SIZE UDS_BL_C092_BOOTLOADER_SIZE
+#define UDS_BL_NVM_METADATA_START UDS_BL_C092_NVM_METADATA_START
+#define UDS_BL_APP_SLOT_A_START UDS_BL_C092_APP_SLOT_A_START
+#define UDS_BL_APP_SLOT_A_SIZE UDS_BL_C092_APP_SLOT_A_SIZE
+#define UDS_BL_APP_SLOT_B_START UDS_BL_C092_APP_SLOT_B_START
+#define UDS_BL_APP_SLOT_B_SIZE UDS_BL_C092_APP_SLOT_B_SIZE
+#define UDS_BL_RAM_START UDS_BL_C092_RAM_START
+#define UDS_BL_RAM_END UDS_BL_C092_RAM_END
+#else
+#define UDS_BL_FLASH_BASE UDS_BL_F767_FLASH_BASE
+#define UDS_BL_FLASH_SIZE UDS_BL_F767_FLASH_SIZE
+#define UDS_BL_BOOTLOADER_START UDS_BL_F767_BOOTLOADER_START
+#define UDS_BL_BOOTLOADER_SIZE UDS_BL_F767_BOOTLOADER_SIZE
+#define UDS_BL_NVM_METADATA_START UDS_BL_F767_NVM_METADATA_START
+#define UDS_BL_APP_SLOT_A_START UDS_BL_F767_APP_SLOT_A_START
+#define UDS_BL_APP_SLOT_A_SIZE UDS_BL_F767_APP_SLOT_A_SIZE
+#define UDS_BL_APP_SLOT_B_START UDS_BL_F767_APP_SLOT_B_START
+#define UDS_BL_APP_SLOT_B_SIZE UDS_BL_F767_APP_SLOT_B_SIZE
+#define UDS_BL_RAM_START UDS_BL_F767_RAM_START
+#define UDS_BL_RAM_END UDS_BL_F767_RAM_END
+#endif
 
 #define UDS_BL_METADATA_MAGIC 0x5544534DUL /* "UDSM" */
 
@@ -25,9 +74,6 @@
 #define UDS_ROUTINE_SUBFUNCTION_START_ROUTINE 0x01U
 #define UDS_ROUTINE_SUBFUNCTION_STOP_ROUTINE 0x02U
 #define UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS 0x03U
-
-#define UDS_BL_RAM_START 0x20000000UL
-#define UDS_BL_RAM_END 0x20080000UL
 
 typedef enum {
     UDS_BL_SLOT_INVALID = 0,
@@ -47,9 +93,12 @@ typedef struct __attribute__((packed)) {
 } FirmwareMetadata_t;
 
 typedef struct {
+    UdsBootloaderTarget target;
     uint32_t active_version;
     uint32_t active_slot_addr;
+    uint32_t active_slot_size;
     uint32_t target_slot_addr;
+    uint32_t target_slot_size;
     bool download_in_progress;
     bool candidate_verified;
     uint8_t last_erase_result;
@@ -58,6 +107,9 @@ typedef struct {
 } UdsBootloaderContext;
 
 void uds_bootloader_init(void);
+void uds_bootloader_set_target(UdsBootloaderTarget target);
+UdsBootloaderTarget uds_bootloader_get_target(void);
+
 UdsDownloadMemoryMap uds_bootloader_get_memory_map(void);
 uint32_t uds_bootloader_get_active_version(void);
 uint32_t uds_bootloader_get_active_slot(void);
@@ -77,7 +129,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
                                                  uint16_t in_len, uint8_t *out, uint16_t *out_len,
                                                  uint16_t capacity);
 
-/* Cortex-M7 Vector Table Relocation & Cache Maintenance Jump */
+/* Vector Table Relocation & Jump */
 void uds_bootloader_jump_to_app(uint32_t app_vector_addr);
 
 #endif /* STM32_UDS_ISO_TP_UDS_BOOTLOADER_H */

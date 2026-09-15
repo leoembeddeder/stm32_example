@@ -120,6 +120,19 @@ if(UDS_ISO_TP_BUILD_TESTS)
     add_test(NAME uds_iso_tp_bootloader_dtc_contract
              COMMAND uds_iso_tp_bootloader_dtc_test)
 
+    add_executable(uds_iso_tp_c092_bootloader_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_c092_bootloader.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c)
+    target_include_directories(uds_iso_tp_c092_bootloader_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
+    target_link_libraries(uds_iso_tp_c092_bootloader_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_c092_bootloader_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_c092_bootloader_contract
+             COMMAND uds_iso_tp_c092_bootloader_test)
+
     add_executable(uds_iso_tp_wear_leveling_test
         tests/uds/test_wear_leveling.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_dtc_app.c)

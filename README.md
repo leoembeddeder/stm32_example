@@ -57,6 +57,7 @@ The reusable bindings are documented in [`examples/stm32f767_bxcan/`](examples/s
 | Library architecture | [`docs/standalone/architecture.md`](docs/standalone/architecture.md) |
 | Classical CAN and CAN-FD ISO-TP | [`docs/standalone/isotp.md`](docs/standalone/isotp.md) |
 | STM32 examples | [`docs/standalone/stm32_examples.md`](docs/standalone/stm32_examples.md) |
+| Diagnostic device applications | [`docs/applications/README.md`](docs/applications/README.md) |
 | HIL and CAN-FD evidence | [`docs/standalone/hil.md`](docs/standalone/hil.md) |
 | Validation and release gates | [`docs/standalone/validation.md`](docs/standalone/validation.md) |
 | Release-readiness audit | [`docs/standalone/release_audit.md`](docs/standalone/release_audit.md) |
