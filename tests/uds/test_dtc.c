@@ -56,10 +56,16 @@ int main(void) {
     assert(uds_dtc_request_length_valid(0x0AU, 3U));
     assert(uds_dtc_request_length_valid(0x14U, 2U));
     assert(uds_dtc_request_length_valid(0x15U, 2U));
-    assert(uds_dtc_request_length_valid(0x16U, 4U));
+    assert(uds_dtc_request_length_valid(0x16U, 3U));
+    assert(uds_dtc_request_length_valid(0x17U, 4U));
+    assert(uds_dtc_request_length_valid(0x18U, 7U));
+    assert(uds_dtc_request_length_valid(0x19U, 7U));
+    assert(uds_dtc_request_length_valid(0x42U, 5U));
+    assert(uds_dtc_request_length_valid(0x55U, 3U));
     assert(uds_dtc_request_length_valid(0x0BU, 2U));
     assert(!uds_dtc_request_length_valid(0x01U, 2U));
     assert(!uds_dtc_request_length_valid(0x04U, 4U));
+    assert(!uds_dtc_request_length_valid(0x42U, 3U));
     assert(!uds_dtc_request_length_valid(0x20U, 3U));
 
     const UdsDtcBackend backend = {

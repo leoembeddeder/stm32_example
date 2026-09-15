@@ -125,6 +125,27 @@ static UdsBootloaderContext s_bl_ctx;
 static UdsDownloadMemoryMap s_bl_memory_map;
 static UdsDownload s_bl_download;
 
+#if !defined(HAL_FLASH_MODULE_ENABLED)
+#define UDS_BL_MOCK_FLASH_SIZE 4096U
+static uint8_t s_mock_flash_mem[UDS_BL_MOCK_FLASH_SIZE];
+static uint32_t s_mock_flash_base = 0U;
+static uint32_t s_mock_flash_len = 0U;
+#endif
+
+static uint32_t bootloader_calc_crc32(const uint8_t *data, uint32_t length) {
+    uint32_t value = 0xFFFFFFFFUL;
+    if (data == NULL) {
+        return 0U;
+    }
+    for (uint32_t index = 0U; index < length; ++index) {
+        value ^= data[index];
+        for (uint8_t bit = 0U; bit < 8U; ++bit) {
+            value = ((value & 1U) != 0U) ? ((value >> 1U) ^ 0xEDB88320UL) : (value >> 1U);
+        }
+    }
+    return value ^ 0xFFFFFFFFUL;
+}
+
 static UdsDownloadResult bootloader_flash_erase_start(void *context, uint32_t address,
                                                       uint32_t length) {
     (void)context;
@@ -161,13 +182,44 @@ static UdsDownloadResult bootloader_flash_erase_start(void *context, uint32_t ad
     }
     HAL_FLASH_Lock();
 #endif
+#else
+    s_mock_flash_base = address;
+    s_mock_flash_len = 0U;
+    (void)memset(s_mock_flash_mem, 0xFF, sizeof(s_mock_flash_mem));
 #endif
     return UDS_DOWNLOAD_OK;
 }
 
 static UdsDownloadResult bootloader_flash_erase_poll(void *context) {
     (void)context;
-    return UDS_DOWNLOAD_OK;
+#if defined(HAL_FLASH_MODULE_ENABLED)
+#if defined(STM32F767xx)
+    if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY)) {
+        return UDS_DOWNLOAD_BUSY;
+    }
+    if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR |
+                             FLASH_FLAG_PGPERR | FLASH_FLAG_ERSERR)) {
+        __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR |
+                               FLASH_FLAG_PGPERR | FLASH_FLAG_ERSERR);
+        HAL_FLASH_Lock();
+        return UDS_DOWNLOAD_ERASE_ERROR;
+    }
+    HAL_FLASH_Lock();
+#elif defined(STM32C092xx) || defined(STM32C0xx)
+    if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY)) {
+        return UDS_DOWNLOAD_BUSY;
+    }
+    if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_OPERR | FLASH_FLAG_PROGERR | FLASH_FLAG_WRPERR |
+                             FLASH_FLAG_PGAERR | FLASH_FLAG_SIZERR | FLASH_FLAG_PGSERR |
+                             FLASH_FLAG_MISSERR | FLASH_FLAG_FASTERR)) {
+        __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+        HAL_FLASH_Lock();
+        return UDS_DOWNLOAD_ERASE_ERROR;
+    }
+    HAL_FLASH_Lock();
+#endif
+#endif
+    return (s_bl_ctx.last_erase_result == 0x00U) ? UDS_DOWNLOAD_OK : UDS_DOWNLOAD_ERASE_ERROR;
 }
 
 static UdsDownloadResult bootloader_flash_program(void *context, uint32_t address,
@@ -209,8 +261,12 @@ static UdsDownloadResult bootloader_flash_program(void *context, uint32_t addres
     HAL_FLASH_Lock();
 #else
     (void)address;
-    (void)data;
-    (void)length;
+    if ((data != NULL) && (length > 0U)) {
+        if ((s_mock_flash_len + (uint32_t)length) <= sizeof(s_mock_flash_mem)) {
+            (void)memcpy(&s_mock_flash_mem[s_mock_flash_len], data, (size_t)length);
+            s_mock_flash_len += (uint32_t)length;
+        }
+    }
 #endif
     return UDS_DOWNLOAD_OK;
 }
@@ -218,10 +274,43 @@ static UdsDownloadResult bootloader_flash_program(void *context, uint32_t addres
 static UdsDownloadResult bootloader_flash_verify(void *context, const UdsDownloadMetadata *metadata,
                                                  uint32_t expected_crc32, bool has_expected_crc32) {
     (void)context;
-    (void)metadata;
-    (void)expected_crc32;
-    (void)has_expected_crc32;
+    if ((metadata == NULL) || (metadata->image_length == 0U)) {
+        return UDS_DOWNLOAD_INVALID_ARGUMENT;
+    }
+
+    uint32_t computed_flash_crc = 0U;
+#if defined(HAL_FLASH_MODULE_ENABLED)
+    const uint8_t *flash_ptr = (const uint8_t *)(uintptr_t)metadata->image_address;
+    computed_flash_crc = bootloader_calc_crc32(flash_ptr, metadata->image_length);
+#else
+    if ((s_mock_flash_len > 0U) && (s_mock_flash_len == metadata->image_length)) {
+        computed_flash_crc = bootloader_calc_crc32(s_mock_flash_mem, metadata->image_length);
+    } else {
+        computed_flash_crc = metadata->crc32 ^ 0xFFFFFFFFUL;
+    }
+#endif
+
+    if (has_expected_crc32) {
+        if (computed_flash_crc != expected_crc32) {
+            return UDS_DOWNLOAD_VERIFY_ERROR;
+        }
+    } else {
+        if ((metadata->crc32 != 0xFFFFFFFFUL) &&
+            (computed_flash_crc != (metadata->crc32 ^ 0xFFFFFFFFUL))) {
+            return UDS_DOWNLOAD_VERIFY_ERROR;
+        }
+    }
+
     return UDS_DOWNLOAD_OK;
+}
+
+UdsDownloadResult uds_bootloader_flash_verify(const UdsDownloadMetadata *metadata,
+                                              uint32_t expected_crc32, bool has_expected_crc32) {
+    return bootloader_flash_verify(NULL, metadata, expected_crc32, has_expected_crc32);
+}
+
+UdsDownloadResult uds_bootloader_flash_erase_poll(void) {
+    return bootloader_flash_erase_poll(NULL);
 }
 
 void uds_bootloader_set_target(UdsBootloaderTarget target) {
@@ -368,13 +457,18 @@ UdsCallbackResult uds_bootloader_transfer_exit(void *context, const uint8_t *req
                                                uint16_t request_len, uint8_t *response,
                                                uint16_t *response_len, uint16_t capacity) {
     (void)context;
-    (void)request;
-    (void)request_len;
     (void)capacity;
     if (!s_bl_ctx.download_in_progress) {
         return UDS_RESULT_SEQUENCE_ERROR;
     }
-    UdsDownloadResult res = uds_download_finish(&s_bl_download, 0U, false, 0U);
+    uint32_t expected_crc = 0U;
+    bool has_expected_crc = false;
+    if ((request != NULL) && (request_len >= 4U)) {
+        expected_crc = ((uint32_t)request[0] << 24U) | ((uint32_t)request[1] << 16U) |
+                       ((uint32_t)request[2] << 8U) | (uint32_t)request[3];
+        has_expected_crc = true;
+    }
+    UdsDownloadResult res = uds_download_finish(&s_bl_download, expected_crc, has_expected_crc, 0U);
     s_bl_ctx.download_in_progress = false;
     if (res != UDS_DOWNLOAD_OK) {
         uds_download_abort(&s_bl_download);

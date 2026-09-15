@@ -71,7 +71,7 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
         break;
     }
 
-    /* 0x02, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x13, 0x15, 0x17, 0x42, 0x55: List reporting */
+    /* 0x02, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x13, 0x15: List reporting */
     case 0x02U:
     case 0x0AU:
     case 0x0BU:
@@ -80,10 +80,7 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
     case 0x0EU:
     case 0x0FU:
     case 0x13U:
-    case 0x15U:
-    case 0x17U:
-    case 0x42U:
-    case 0x55U: {
+    case 0x15U: {
         if (!append_byte(response, &len, response_capacity,
                          s_dtc_storage.status_availability_mask)) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
@@ -94,7 +91,7 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             if (subfunction == 0x0AU) {
                 include = true; /* All supported DTCs */
             } else if (rec->active) {
-                if (subfunction == 0x15U || subfunction == 0x55U) {
+                if (subfunction == 0x15U) {
                     include = ((rec->status_byte & UDS_DTC_STATUS_CONFIRMED) != 0U);
                 } else {
                     include = ((rec->status_byte & status_mask) != 0U);
@@ -102,6 +99,70 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             }
             if (include) {
                 if (!append_dtc(response, &len, response_capacity, rec)) {
+                    return UDS_RESULT_RESPONSE_TOO_LONG;
+                }
+            }
+        }
+        break;
+    }
+
+    /* 0x17: reportUserDefMemoryDTCByStatusMask */
+    case 0x17U: {
+        uint8_t mem_selection = (request_length >= 4U) ? request[3] : 0x00U;
+        if (!append_byte(response, &len, response_capacity, mem_selection) ||
+            !append_byte(response, &len, response_capacity,
+                         s_dtc_storage.status_availability_mask)) {
+            return UDS_RESULT_RESPONSE_TOO_LONG;
+        }
+        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+            if (rec->active && ((rec->status_byte & status_mask) != 0U)) {
+                if (!append_dtc(response, &len, response_capacity, rec)) {
+                    return UDS_RESULT_RESPONSE_TOO_LONG;
+                }
+            }
+        }
+        break;
+    }
+
+    /* 0x42: reportDTCBySeverityMaskRecord */
+    case 0x42U: {
+        uint8_t group_id = (request_length >= 3U) ? request[2] : 0x00U;
+        uint8_t req_status_mask = (request_length >= 4U) ? request[3] : 0xFFU;
+        uint8_t req_severity_mask = (request_length >= 5U) ? request[4] : 0xFFU;
+        if (!append_byte(response, &len, response_capacity, group_id) ||
+            !append_byte(response, &len, response_capacity,
+                         s_dtc_storage.status_availability_mask)) {
+            return UDS_RESULT_RESPONSE_TOO_LONG;
+        }
+        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+            if (rec->active && ((rec->status_byte & req_status_mask) != 0U) &&
+                ((rec->severity & req_severity_mask) != 0U)) {
+                if (!append_byte(response, &len, response_capacity, rec->severity) ||
+                    !append_byte(response, &len, response_capacity, rec->functional_unit) ||
+                    !append_dtc(response, &len, response_capacity, rec)) {
+                    return UDS_RESULT_RESPONSE_TOO_LONG;
+                }
+            }
+        }
+        break;
+    }
+
+    /* 0x55: reportWWHOBDDTCByMaskRecord */
+    case 0x55U: {
+        uint8_t group_id = (request_length >= 3U) ? request[2] : 0x00U;
+        if (!append_byte(response, &len, response_capacity, group_id) ||
+            !append_byte(response, &len, response_capacity,
+                         s_dtc_storage.status_availability_mask)) {
+            return UDS_RESULT_RESPONSE_TOO_LONG;
+        }
+        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+            if (rec->active && ((rec->status_byte & UDS_DTC_STATUS_CONFIRMED) != 0U)) {
+                if (!append_byte(response, &len, response_capacity, rec->severity) ||
+                    !append_byte(response, &len, response_capacity, rec->functional_unit) ||
+                    !append_dtc(response, &len, response_capacity, rec)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
             }
@@ -125,9 +186,16 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
     }
 
     /* 0x04, 0x05, 0x18: Snapshot Record by DTC */
+    /* 0x04, 0x05, 0x18: Snapshot Record by DTC */
     case 0x04U:
     case 0x05U:
     case 0x18U: {
+        if (subfunction == 0x18U) {
+            uint8_t mem_selection = (request_length >= 7U) ? request[6] : 0x00U;
+            if (!append_byte(response, &len, response_capacity, mem_selection)) {
+                return UDS_RESULT_RESPONSE_TOO_LONG;
+            }
+        }
         bool found = false;
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
             const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
@@ -182,11 +250,43 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
         break;
     }
 
-    /* 0x06, 0x10, 0x16, 0x19: Extended Data Records */
+    /* 0x16: reportDTCExtDataRecordByRecordNumber */
+    case 0x16U: {
+        uint8_t rec_num = (request_length >= 3U) ? request[2] : 0x01U;
+        if (!append_byte(response, &len, response_capacity, rec_num)) {
+            return UDS_RESULT_RESPONSE_TOO_LONG;
+        }
+        for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
+            const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];
+            if (rec->active) {
+                if (!append_dtc(response, &len, response_capacity, rec) ||
+                    !append_byte(response, &len, response_capacity, rec_num)) {
+                    return UDS_RESULT_RESPONSE_TOO_LONG;
+                }
+                if (rec_num == UDS_DTC_EXT_DATA_AGING_COUNTER) {
+                    if (!append_byte(response, &len, response_capacity, rec->aging_counter)) {
+                        return UDS_RESULT_RESPONSE_TOO_LONG;
+                    }
+                } else {
+                    if (!append_byte(response, &len, response_capacity, rec->occurrence_counter)) {
+                        return UDS_RESULT_RESPONSE_TOO_LONG;
+                    }
+                }
+            }
+        }
+        break;
+    }
+
+    /* 0x06, 0x10, 0x19: Extended Data Records by DTC */
     case 0x06U:
     case 0x10U:
-    case 0x16U:
     case 0x19U: {
+        if (subfunction == 0x19U) {
+            uint8_t mem_selection = (request_length >= 7U) ? request[6] : 0x00U;
+            if (!append_byte(response, &len, response_capacity, mem_selection)) {
+                return UDS_RESULT_RESPONSE_TOO_LONG;
+            }
+        }
         bool found = false;
         for (uint8_t i = 0U; i < s_dtc_storage.record_count; ++i) {
             const UdsDtcAppRecord *rec = &s_dtc_storage.records[i];

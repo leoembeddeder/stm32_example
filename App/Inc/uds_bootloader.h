@@ -116,6 +116,11 @@ uint32_t uds_bootloader_get_active_slot(void);
 bool uds_bootloader_is_activation_pending(void);
 bool uds_bootloader_is_application_valid(uint32_t app_vector_addr);
 
+/* Flash Operations & Image Integrity Verification */
+UdsDownloadResult uds_bootloader_flash_verify(const UdsDownloadMetadata *metadata,
+                                              uint32_t expected_crc32, bool has_expected_crc32);
+UdsDownloadResult uds_bootloader_flash_erase_poll(void);
+
 /* UDS Service Callbacks for Flashing Pipeline */
 UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t address, uint32_t length,
                                                   uint16_t *max_block_length);

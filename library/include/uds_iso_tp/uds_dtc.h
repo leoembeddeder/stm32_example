@@ -35,6 +35,7 @@
 #define UDS_DTC_CAP_REPORT_BY_SEVERITY_RECORDS (1UL << 22U)       /* 0x19 */
 #define UDS_DTC_CAP_CUSTOM_42 (1UL << 23U)
 #define UDS_DTC_CAP_CUSTOM_55 (1UL << 24U)
+#define UDS_DTC_CAP_REPORT_SEVERITY_INFORMATION (1UL << 25U) /* 0x09 */
 
 typedef UdsCallbackResult (*UdsDtcReportFn)(void *context, uint8_t subfunction,
                                             const uint8_t *request, uint16_t request_length,

@@ -105,7 +105,58 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
         0x0800A004UL)); /* Unaligned VTOR (not 256-byte aligned) */
 }
 
+static void test_c092_bootloader_flash_verify_and_erase_poll(void) {
+    /* Test flash erase poll */
+    assert(uds_bootloader_flash_erase_poll() == UDS_DOWNLOAD_OK);
+
+    /* Test flash verify with invalid metadata */
+    assert(uds_bootloader_flash_verify(NULL, 0U, false) == UDS_DOWNLOAD_INVALID_ARGUMENT);
+    UdsDownloadMetadata empty_meta;
+    (void)memset(&empty_meta, 0, sizeof(empty_meta));
+    assert(uds_bootloader_flash_verify(&empty_meta, 0U, false) == UDS_DOWNLOAD_INVALID_ARGUMENT);
+
+    /* Test flash verify with matching CRC */
+    uint8_t payload[64];
+    (void)memset(payload, 0xA5, sizeof(payload));
+
+    uint16_t max_block = 0U;
+    assert(uds_bootloader_request_download(NULL, UDS_BL_C092_APP_SLOT_B_START, sizeof(payload),
+                                           &max_block) == UDS_RESULT_OK);
+    assert(uds_bootloader_transfer_data(NULL, 1U, payload, sizeof(payload)) == UDS_RESULT_OK);
+
+    /* Compute standard CRC32 over payload */
+    uint32_t crc = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < sizeof(payload); ++i) {
+        crc ^= payload[i];
+        for (uint8_t bit = 0; bit < 8; ++bit) {
+            crc = ((crc & 1U) != 0U) ? ((crc >> 1U) ^ 0xEDB88320UL) : (crc >> 1U);
+        }
+    }
+    crc ^= 0xFFFFFFFFUL;
+
+    uint8_t req_crc[4] = {(uint8_t)(crc >> 24U), (uint8_t)(crc >> 16U), (uint8_t)(crc >> 8U),
+                          (uint8_t)crc};
+    uint8_t exit_resp[4];
+    uint16_t exit_resp_len = 0U;
+    assert(uds_bootloader_transfer_exit(NULL, req_crc, sizeof(req_crc), exit_resp, &exit_resp_len,
+                                        sizeof(exit_resp)) == UDS_RESULT_OK);
+    assert(exit_resp[0] == 0x00U);
+
+    /* Direct API verify test */
+    UdsDownloadMetadata test_meta;
+    (void)memset(&test_meta, 0, sizeof(test_meta));
+    test_meta.image_address = UDS_BL_C092_APP_SLOT_B_START;
+    test_meta.image_length = sizeof(payload);
+    test_meta.crc32 = crc ^ 0xFFFFFFFFUL;
+    assert(uds_bootloader_flash_verify(&test_meta, crc, true) == UDS_DOWNLOAD_OK);
+
+    /* Direct API verify with corrupt expected CRC */
+    assert(uds_bootloader_flash_verify(&test_meta, crc ^ 0x12345678UL, true) ==
+           UDS_DOWNLOAD_VERIFY_ERROR);
+}
+
 int main(void) {
     test_c092_bootloader_memory_map_and_flow();
+    test_c092_bootloader_flash_verify_and_erase_poll();
     return 0;
 }

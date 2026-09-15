@@ -87,6 +87,34 @@ static void test_dtc_app_all_subfunctions(void) {
                            sizeof(response)) == UDS_RESULT_OK);
     assert(response[0] == 0x06U);
 
+    /* 6b. Subfunction 0x16: reportDTCExtDataRecordByRecordNumber (3 bytes: 19 16 01) */
+    uint8_t req_16[] = {0x19U, 0x16U, 0x01U};
+    assert(backend->report(NULL, 0x16U, req_16, sizeof(req_16), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(response[0] == 0x16U);
+    assert(response[1] == 0x01U); /* Echoes record number */
+
+    /* 6c. Subfunction 0x17: reportUserDefMemoryDTCByStatusMask (4 bytes: 19 17 FF 01) */
+    uint8_t req_17[] = {0x19U, 0x17U, 0xFFU, 0x01U};
+    assert(backend->report(NULL, 0x17U, req_17, sizeof(req_17), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(response[0] == 0x17U);
+    assert(response[1] == 0x01U); /* Echoes memory selection */
+
+    /* 6d. Subfunction 0x42: reportDTCBySeverityMaskRecord (5 bytes: 19 42 00 FF FF) */
+    uint8_t req_42[] = {0x19U, 0x42U, 0x00U, 0xFFU, 0xFFU};
+    assert(backend->report(NULL, 0x42U, req_42, sizeof(req_42), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(response[0] == 0x42U);
+    assert(response[1] == 0x00U); /* Echoes functional group */
+
+    /* 6e. Subfunction 0x55: reportWWHOBDDTCByMaskRecord (3 bytes: 19 55 00) */
+    uint8_t req_55[] = {0x19U, 0x55U, 0x00U};
+    assert(backend->report(NULL, 0x55U, req_55, sizeof(req_55), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(response[0] == 0x55U);
+    assert(response[1] == 0x00U); /* Echoes functional group */
+
     /* 7. Subfunction 0x14: reportDTCFaultDetectionCounter */
     uint8_t req_14[] = {0x19U, 0x14U};
     assert(backend->report(NULL, 0x14U, req_14, sizeof(req_14), response, &resp_len,

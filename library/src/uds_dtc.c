@@ -51,7 +51,7 @@ bool uds_dtc_request_length_valid(uint8_t subfunction, uint16_t request_length) 
     case 0x11U:
     case 0x12U:
     case 0x13U:
-    case 0x42U:
+    case 0x16U:
         return request_length == 3U;
     case 0x03U:
     case 0x0BU:
@@ -64,20 +64,20 @@ bool uds_dtc_request_length_valid(uint8_t subfunction, uint16_t request_length) 
     case 0x15U:
     case 0x55U:
         return (request_length == 2U) || (request_length == 3U);
+    case 0x07U:
+    case 0x08U:
+    case 0x17U:
+        return (request_length == 3U) || (request_length == 4U);
+    case 0x09U:
+    case 0x42U:
+        return request_length == 5U;
     case 0x04U:
     case 0x06U:
     case 0x10U:
         return (request_length == 5U) || (request_length == 6U);
-    case 0x07U:
-    case 0x08U:
-        return (request_length == 3U) || (request_length == 4U);
-    case 0x09U:
-        return request_length == 5U;
-    case 0x16U:
-    case 0x17U:
     case 0x18U:
     case 0x19U:
-        return (request_length >= 4U) && (request_length <= 7U);
+        return (request_length == 6U) || (request_length == 7U);
     default:
         return false;
     }
@@ -102,7 +102,7 @@ uint32_t uds_dtc_capability_for_subfunction(uint8_t subfunction) {
     case 0x08U:
         return UDS_DTC_CAP_REPORT_BY_SEVERITY;
     case 0x09U:
-        return (1UL << 25U);
+        return UDS_DTC_CAP_REPORT_SEVERITY_INFORMATION;
     case 0x0AU:
         return UDS_DTC_CAP_REPORT_SUPPORTED_DTC;
     case 0x0BU:
