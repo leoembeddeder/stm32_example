@@ -21,6 +21,7 @@ extern "C" {
 #define UDS_MEMORY_APP_FLASH_APP_SIZE 0x00040000U /* 256 KB */
 
 void uds_memory_app_init(void);
+void uds_memory_app_set_server(const UdsServer *server);
 const UdsMemoryServiceBackend *uds_memory_app_get_backend(void);
 
 #ifdef __cplusplus

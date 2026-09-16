@@ -55,6 +55,7 @@ bool uds_memory_decode_alfid(uint8_t alfid, uint8_t *addr_len, uint8_t *size_len
 bool uds_memory_decode_u32(const uint8_t *buf, uint8_t len, uint32_t *val);
 
 void uds_memory_init(UdsMemoryManager *mgr, const UdsMemoryConfig *config);
+void uds_memory_set_server(UdsMemoryManager *mgr, const UdsServer *server);
 const UdsMemoryServiceBackend *uds_memory_get_backend(const UdsMemoryManager *mgr);
 
 UdsCallbackResult uds_memory_read_handler(void *context, const uint8_t *request,

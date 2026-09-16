@@ -120,8 +120,7 @@ UdsCallbackResult uds_memory_read_handler(void *context, const uint8_t *request,
     }
 
     /* 8. Security check */
-    const UdsServer *server =
-        (mgr->config.server != NULL) ? mgr->config.server : uds_server_get_current();
+    const UdsServer *server = mgr->config.server;
     uint8_t security_level = (server != NULL) ? uds_server_security_level(server) : 0U;
     if (((reg->flags & UDS_MEMORY_FLAG_SECURE_READ) != 0U) && (security_level == 0U)) {
         return UDS_RESULT_SECURITY_DENIED;
@@ -214,8 +213,7 @@ UdsCallbackResult uds_memory_write_handler(void *context, const uint8_t *request
         return UDS_RESULT_OUT_OF_RANGE;
     }
 
-    const UdsServer *server =
-        (mgr->config.server != NULL) ? mgr->config.server : uds_server_get_current();
+    const UdsServer *server = mgr->config.server;
     uint8_t session = (server != NULL) ? uds_server_session(server) : UDS_SESSION_DEFAULT;
     uint8_t security_level = (server != NULL) ? uds_server_security_level(server) : 0U;
 
@@ -268,6 +266,12 @@ void uds_memory_init(UdsMemoryManager *mgr, const UdsMemoryConfig *config) {
     mgr->backend.read_memory = uds_memory_read_handler;
     mgr->backend.write_memory = uds_memory_write_handler;
     s_active_memory_manager = mgr;
+}
+
+void uds_memory_set_server(UdsMemoryManager *mgr, const UdsServer *server) {
+    if (mgr != NULL) {
+        mgr->config.server = server;
+    }
 }
 
 const UdsMemoryServiceBackend *uds_memory_get_backend(const UdsMemoryManager *mgr) {

@@ -290,8 +290,6 @@ static uint8_t result_to_nrc(UdsCallbackResult result) {
     }
 }
 
-static const UdsServer *s_current_server = NULL;
-
 static bool nrc_suppressed_on_functional(uint8_t nrc) {
     return (nrc == UDS_NRC_SERVICE_NOT_SUPPORTED) || (nrc == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED) ||
            (nrc == UDS_NRC_REQUEST_OUT_OF_RANGE) ||
@@ -1191,32 +1189,25 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
         return UDS_RESULT_ERROR;
     }
     server->current_address_mode = address_mode;
-    s_current_server = server;
     uint8_t service = request[0];
     const UdsServiceAttribute *attribute = uds_service_attribute(
         service, (request_len > 1U) ? (request[1] & 0x7FU) : UDS_SERVICE_ANY_SUBFUNCTION);
     if (attribute->sid != 0U) {
         if ((attribute->address_mode != UDS_ADDRESS_MODE_BOTH) &&
             ((attribute->address_mode & address_mode) == 0U)) {
-            UdsCallbackResult res =
-                negative_response(server, request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
-                                  response, response_len, capacity);
-            s_current_server = NULL;
-            return res;
+            return negative_response(server, request,
+                                     UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION, response,
+                                     response_len, capacity);
         }
         if ((attribute->session_mask & session_mask(server->session)) == 0U) {
-            UdsCallbackResult res =
-                negative_response(server, request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
-                                  response, response_len, capacity);
-            s_current_server = NULL;
-            return res;
+            return negative_response(server, request,
+                                     UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION, response,
+                                     response_len, capacity);
         }
         if ((attribute->security_mask != UDS_SECURITY_MASK_NONE) &&
             ((attribute->security_mask & (uint16_t)(1U << server->security_level)) == 0U)) {
-            UdsCallbackResult res = negative_response(
-                server, request, UDS_NRC_SECURITY_ACCESS_DENIED, response, response_len, capacity);
-            s_current_server = NULL;
-            return res;
+            return negative_response(server, request, UDS_NRC_SECURITY_ACCESS_DENIED, response,
+                                     response_len, capacity);
         }
     }
     *response_len = 0U;
@@ -1296,7 +1287,6 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
                                    response_len, capacity);
         break;
     }
-    s_current_server = NULL;
     return result;
 }
 
@@ -1395,5 +1385,5 @@ bool uds_server_security_seed_valid(const UdsServer *server) {
 }
 
 const UdsServer *uds_server_get_current(void) {
-    return s_current_server;
+    return NULL;
 }

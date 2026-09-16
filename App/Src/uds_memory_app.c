@@ -122,6 +122,10 @@ void uds_memory_app_init(void) {
     uds_memory_init(&s_app_memory_mgr, &config);
 }
 
+void uds_memory_app_set_server(const UdsServer *server) {
+    uds_memory_set_server(&s_app_memory_mgr, server);
+}
+
 const UdsMemoryServiceBackend *uds_memory_app_get_backend(void) {
     return uds_memory_get_backend(&s_app_memory_mgr);
 }

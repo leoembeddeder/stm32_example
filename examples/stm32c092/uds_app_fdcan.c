@@ -143,6 +143,9 @@ __attribute__((weak)) void uds_memory_app_init(void) {}
 __attribute__((weak)) const UdsMemoryServiceBackend *uds_memory_app_get_backend(void) {
     return NULL;
 }
+__attribute__((weak)) void uds_memory_app_set_server(const UdsServer *server) {
+    (void)server;
+}
 #else
 void uds_dtc_app_init(void);
 const UdsDtcBackend *uds_dtc_app_get_backend(void);
@@ -245,6 +248,9 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
     s_transport = transport;
     s_rx_pending = false;
     s_initialized = uds_isotp_endpoint_init(&s_endpoint, &config, now_ms);
+    if (s_initialized) {
+        uds_memory_app_set_server(&s_endpoint.uds);
+    }
     if (s_diagnostics != NULL) {
         uds_c092_fdcan_attach_diagnostics(transport, s_diagnostics);
         if (s_initialized) {

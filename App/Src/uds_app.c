@@ -101,6 +101,9 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     s_rx_overflow_count = 0U;
     s_rx_overflow_flag = false;
     s_initialized = uds_isotp_endpoint_init(&s_endpoint, &config, now_ms);
+    if (s_initialized) {
+        uds_memory_app_set_server(&s_endpoint.uds);
+    }
 }
 
 void uds_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc) {

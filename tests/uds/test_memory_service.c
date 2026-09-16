@@ -278,6 +278,7 @@ static void test_iso_0x23_examples_and_nrc(void) {
 
     UdsServer server;
     uds_server_init(&server, &callbacks, NULL, 1000U);
+    uds_memory_set_server(&mgr, &server);
 
     uint8_t response[1500];
     uint16_t resp_len = 0U;
@@ -430,6 +431,7 @@ static void test_iso_0x3D_examples_and_nrc(void) {
 
     UdsServer server;
     uds_server_init(&server, &callbacks, NULL, 1000U);
+    uds_memory_set_server(&mgr, &server);
 
     uint8_t response[256];
     uint16_t resp_len = 0U;
@@ -570,6 +572,7 @@ static void test_uds_memory_app_integration(void) {
 
     UdsServer server;
     uds_server_init(&server, &callbacks, NULL, 1000U);
+    uds_memory_app_set_server(&server);
 
     uint8_t response[256];
     uint16_t resp_len = 0U;
