@@ -503,10 +503,46 @@ static void test_uds(void) {
     assert(response[0] == 0x7FU && response[1] == 0x99U && response[2] == 0x11U);
 }
 
+static void test_reentrant_multi_instance_servers(void) {
+    UdsServer server_phy;
+    UdsServer server_func;
+    uint8_t response_phy[32];
+    uint8_t response_func[32];
+    uint16_t resp_phy_len = 0U;
+    uint16_t resp_func_len = 0U;
+
+    uds_server_init(&server_phy, NULL, NULL, 1000U);
+    uds_server_init(&server_func, NULL, NULL, 1000U);
+
+    /* Unsupported service 0x99 */
+    uint8_t unsupported[] = {0x99U};
+
+    /* Physical dispatch should respond with NRC 0x11 (ServiceNotSupported) */
+    assert(uds_server_handle_addressed(&server_phy, unsupported, sizeof(unsupported), response_phy,
+                                       &resp_phy_len, sizeof(response_phy), UDS_ADDRESS_PHYSICAL,
+                                       1000U) == UDS_RESULT_OK);
+    assert(resp_phy_len == 3U);
+    assert(response_phy[0] == 0x7FU && response_phy[1] == 0x99U && response_phy[2] == 0x11U);
+
+    /* Functional dispatch should suppress NRC 0x11 and return NO_RESPONSE */
+    assert(uds_server_handle_addressed(&server_func, unsupported, sizeof(unsupported),
+                                       response_func, &resp_func_len, sizeof(response_func),
+                                       UDS_ADDRESS_FUNCTIONAL, 1000U) == UDS_RESULT_NO_RESPONSE);
+    assert(resp_func_len == 0U);
+
+    /* Interleaved calls: physical again, must not be affected by prior functional call */
+    assert(uds_server_handle_addressed(&server_phy, unsupported, sizeof(unsupported), response_phy,
+                                       &resp_phy_len, sizeof(response_phy), UDS_ADDRESS_PHYSICAL,
+                                       1001U) == UDS_RESULT_OK);
+    assert(resp_phy_len == 3U);
+    assert(response_phy[0] == 0x7FU && response_phy[1] == 0x99U && response_phy[2] == 0x11U);
+}
+
 int main(void) {
     test_service_attributes();
     test_addressed_dispatch();
     test_isotp();
     test_uds();
+    test_reentrant_multi_instance_servers();
     return 0;
 }

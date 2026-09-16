@@ -43,6 +43,7 @@ typedef struct {
     uint32_t max_write_size;
     bool (*condition_check)(void *user_ctx, uint8_t sid, uint32_t address, uint32_t size);
     void *user_ctx;
+    const UdsServer *server;
 } UdsMemoryConfig;
 
 typedef struct {

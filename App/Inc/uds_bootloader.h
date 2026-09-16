@@ -79,7 +79,9 @@ typedef enum { UDS_BL_TARGET_STM32F767 = 0, UDS_BL_TARGET_STM32C092 = 1 } UdsBoo
 typedef enum {
     UDS_BL_SLOT_INVALID = 0,
     UDS_BL_SLOT_CANDIDATE = 1,
-    UDS_BL_SLOT_ACTIVE = 2
+    UDS_BL_SLOT_ACTIVE = 2,
+    UDS_BL_SLOT_CONFIRMED = 3,
+    UDS_BL_SLOT_ROLLBACK = 4
 } UdsBootloaderSlotStatus;
 
 typedef struct __attribute__((packed)) {
@@ -90,7 +92,10 @@ typedef struct __attribute__((packed)) {
     uint8_t sha256[32];    /* SHA-256 cryptographic digest */
     uint8_t signature[64]; /* ECDSA/Ed25519 signature */
     uint8_t status;        /* UdsBootloaderSlotStatus */
-    uint8_t reserved[15];
+    uint8_t boot_attempts; /* Current boot attempt count for candidate verification */
+    uint8_t max_attempts;  /* Max allowed boot attempts before automatic rollback */
+    uint8_t active_slot;   /* 0 = Slot A, 1 = Slot B */
+    uint8_t reserved[12];
 } FirmwareMetadata_t;
 
 typedef struct {
@@ -108,6 +113,9 @@ typedef struct {
     FirmwareMetadata_t staging_metadata;
 } UdsBootloaderContext;
 
+typedef bool (*UdsBootloaderSignatureVerifierFn)(const uint8_t *digest32,
+                                                 const uint8_t *signature64);
+
 void uds_bootloader_init(void);
 void uds_bootloader_set_target(UdsBootloaderTarget target);
 UdsBootloaderTarget uds_bootloader_get_target(void);
@@ -118,6 +126,18 @@ uint32_t uds_bootloader_get_active_slot(void);
 bool uds_bootloader_is_activation_pending(void);
 bool uds_bootloader_is_application_valid(uint32_t app_vector_addr);
 UdsDownloadResult uds_bootloader_activate_candidate(void);
+
+/* Cryptographic Signature Verification & Manifest */
+void uds_bootloader_set_signature_verifier(UdsBootloaderSignatureVerifierFn verifier);
+void uds_bootloader_set_signature_required(bool required);
+bool uds_bootloader_verify_signature(const uint8_t digest32[32], const uint8_t signature64[64]);
+void uds_bootloader_calculate_manifest_signature(const uint8_t digest32[32],
+                                                 uint8_t signature64[64]);
+
+/* Power-fail-safe boot state journal & A/B slot descriptor */
+UdsBootloaderSlotStatus uds_bootloader_get_slot_status(void);
+UdsDownloadResult uds_bootloader_confirm_active_image(void);
+UdsDownloadResult uds_bootloader_rollback_candidate(void);
 
 /* Flash Operations & Image Integrity Verification */
 UdsDownloadResult uds_bootloader_flash_verify(const UdsDownloadMetadata *metadata,

@@ -65,6 +65,8 @@ typedef struct {
     bool padding_enabled;
     uint8_t padding_value;
     bool full_duplex;
+    uint32_t (*clock_us)(void *context);
+    void *clock_context;
 } IsoTpConfig;
 
 typedef struct {
@@ -98,8 +100,10 @@ typedef struct {
     uint8_t block_count;
     uint8_t remote_block_size;
     uint8_t remote_st_min;
+    uint32_t remote_st_min_us;
     uint32_t deadline_ms;
     uint32_t next_frame_ms;
+    uint32_t next_frame_us;
     IsoTpTxState state;
     uint8_t wait_frames;
 } IsoTpTx;
@@ -117,6 +121,8 @@ void isotp_config_classic_can(IsoTpConfig *config);
 void isotp_config_can_fd(IsoTpConfig *config, uint8_t tx_dl, uint8_t rx_dl);
 void isotp_config_set_padding(IsoTpConfig *config, bool enabled, uint8_t value);
 void isotp_config_set_full_duplex(IsoTpConfig *config, bool enabled);
+void isotp_config_set_clock_us(IsoTpConfig *config, uint32_t (*clock_us)(void *context),
+                               void *context);
 void isotp_rx_init(IsoTpRx *rx, const IsoTpConfig *config, uint32_t request_id,
                    uint32_t response_id);
 IsoTpStatus isotp_rx_feed(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t now_ms,

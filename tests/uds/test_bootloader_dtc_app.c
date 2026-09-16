@@ -218,11 +218,21 @@ static void test_bootloader_flow(void) {
                                       0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
     (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
 
+    /* Missing / invalid signature must be rejected with 0x04 / SECURITY_DENIED */
+    assert(uds_bootloader_routine_control(
+               NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY, (const uint8_t *)&meta, sizeof(meta),
+               routine_out, &routine_out_len, sizeof(routine_out)) == UDS_RESULT_SECURITY_DENIED);
+    assert(routine_out[0] == 0x04U); /* 0x04: Signature verification failed */
+
+    /* Compute valid cryptographic signature */
+    uds_bootloader_calculate_manifest_signature(meta.sha256, meta.signature);
+
     assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
                                           (const uint8_t *)&meta, sizeof(meta), routine_out,
                                           &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out[0] == 0x00U); /* Verification Passed */
     assert(uds_bootloader_is_activation_pending());
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_CANDIDATE);
 
     /* 5. RoutineControl Subfunction 0x03: requestRoutineResults */
     assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS,
@@ -243,7 +253,15 @@ static void test_bootloader_flow(void) {
     assert(routine_out_len == 1U);
     assert(routine_out[0] == 0x00U);
 
-    /* 7. Vector Table Sanity Validation Gate (S32K144 / OpenBLT specification) */
+    /* 7. Slot activation, confirmation, and rollback state journal */
+    assert(uds_bootloader_activate_candidate() == UDS_DOWNLOAD_OK);
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_ACTIVE);
+    assert(uds_bootloader_confirm_active_image() == UDS_DOWNLOAD_OK);
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_CONFIRMED);
+    assert(uds_bootloader_rollback_candidate() == UDS_DOWNLOAD_OK);
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_ROLLBACK);
+
+    /* 8. Vector Table Sanity Validation Gate (S32K144 / OpenBLT specification) */
     assert(!uds_bootloader_is_application_valid(0x00000000UL)); /* NULL address */
     assert(!uds_bootloader_is_application_valid(0x20000000UL)); /* RAM, not Flash */
     assert(!uds_bootloader_is_application_valid(0x08300000UL)); /* Beyond Flash size */

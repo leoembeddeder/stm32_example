@@ -27,6 +27,8 @@ static UdsIsoTpEndpoint s_endpoint;
 static IsoTpCanFrame s_rx_fifo[UDS_APP_RX_FIFO_CAPACITY];
 static volatile uint8_t s_rx_head;
 static volatile uint8_t s_rx_tail;
+static volatile uint32_t s_rx_overflow_count;
+static volatile bool s_rx_overflow_flag;
 static bool s_initialized;
 static UdsServiceBackends s_service_backends;
 
@@ -72,6 +74,7 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
 #endif
     config.send_frame = uds_can_transport_send;
     config.tx_complete = uds_can_transport_tx_complete;
+    config.tx_error = uds_can_transport_tx_error;
     config.clock_ms = uds_can_transport_clock;
     config.context = transport;
     config.request_id = UDS_APP_REQUEST_ID;
@@ -95,6 +98,8 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     s_transport = transport;
     s_rx_head = 0U;
     s_rx_tail = 0U;
+    s_rx_overflow_count = 0U;
+    s_rx_overflow_flag = false;
     s_initialized = uds_isotp_endpoint_init(&s_endpoint, &config, now_ms);
 }
 
@@ -105,6 +110,8 @@ void uds_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc) {
     }
     uint8_t next_head = (uint8_t)((s_rx_head + 1U) % UDS_APP_RX_FIFO_CAPACITY);
     if (next_head == s_rx_tail) {
+        s_rx_overflow_count = (uint32_t)(s_rx_overflow_count + 1U);
+        s_rx_overflow_flag = true;
         return;
     }
     s_rx_fifo[s_rx_head].can_id = can_id;
@@ -113,6 +120,18 @@ void uds_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc) {
     s_rx_fifo[s_rx_head].bit_rate_switch = false;
     (void)memcpy(s_rx_fifo[s_rx_head].data, data, dlc);
     s_rx_head = next_head;
+}
+
+uint32_t uds_app_get_rx_overflow_count(void) {
+    return s_rx_overflow_count;
+}
+
+bool uds_app_get_rx_overflow_flag(void) {
+    return s_rx_overflow_flag;
+}
+
+void uds_app_clear_rx_overflow_flag(void) {
+    s_rx_overflow_flag = false;
 }
 
 void uds_app_process(uint32_t now_ms) {

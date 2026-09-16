@@ -133,7 +133,8 @@ if(UDS_ISO_TP_BUILD_TESTS)
     add_executable(uds_iso_tp_bootloader_dtc_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_bootloader_dtc_app.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_dtc_app.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c)
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_platform.c)
     target_include_directories(uds_iso_tp_bootloader_dtc_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
@@ -146,7 +147,8 @@ if(UDS_ISO_TP_BUILD_TESTS)
 
     add_executable(uds_iso_tp_c092_bootloader_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_c092_bootloader.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c)
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_platform.c)
     target_include_directories(uds_iso_tp_c092_bootloader_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp

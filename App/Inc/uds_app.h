@@ -3,10 +3,14 @@
 
 #include "can_transport.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 void uds_app_init(UdsCanTransport *transport, uint32_t now_ms);
 void uds_app_process(uint32_t now_ms);
 void uds_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc);
+uint32_t uds_app_get_rx_overflow_count(void);
+bool uds_app_get_rx_overflow_flag(void);
+void uds_app_clear_rx_overflow_flag(void);
 
 #endif

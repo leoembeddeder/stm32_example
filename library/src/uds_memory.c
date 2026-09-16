@@ -120,7 +120,8 @@ UdsCallbackResult uds_memory_read_handler(void *context, const uint8_t *request,
     }
 
     /* 8. Security check */
-    const UdsServer *server = uds_server_get_current();
+    const UdsServer *server =
+        (mgr->config.server != NULL) ? mgr->config.server : uds_server_get_current();
     uint8_t security_level = (server != NULL) ? uds_server_security_level(server) : 0U;
     if (((reg->flags & UDS_MEMORY_FLAG_SECURE_READ) != 0U) && (security_level == 0U)) {
         return UDS_RESULT_SECURITY_DENIED;
@@ -213,7 +214,8 @@ UdsCallbackResult uds_memory_write_handler(void *context, const uint8_t *request
         return UDS_RESULT_OUT_OF_RANGE;
     }
 
-    const UdsServer *server = uds_server_get_current();
+    const UdsServer *server =
+        (mgr->config.server != NULL) ? mgr->config.server : uds_server_get_current();
     uint8_t session = (server != NULL) ? uds_server_session(server) : UDS_SESSION_DEFAULT;
     uint8_t security_level = (server != NULL) ? uds_server_security_level(server) : 0U;
 

@@ -284,11 +284,72 @@ static void test_server_security_error_handling(void) {
            response[2] == UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
 }
 
+static bool mock_entropy_source(uint8_t *buffer, size_t length) {
+    for (size_t i = 0U; i < length; ++i) {
+        buffer[i] = (uint8_t)(0x40U + i);
+    }
+    return true;
+}
+
+static bool mock_key_provider(uint8_t level, const uint8_t *seed, uint8_t *key_out) {
+    if ((level != 2U) || (seed == NULL) || (key_out == NULL)) {
+        return false;
+    }
+    for (size_t i = 0U; i < 16U; ++i) {
+        key_out[i] = (uint8_t)(seed[i] ^ 0xEEU);
+    }
+    return true;
+}
+
+static void test_key_provisioning_and_entropy(void) {
+    uds_security_app_init();
+    assert(!uds_security_app_has_provisioned_key());
+
+    /* 1. Test entropy source injection */
+    uds_security_app_set_entropy_source(mock_entropy_source);
+    uint8_t seed[UDS_SECURITY_APP_LEVEL2_SEED_LEN] = {0U};
+    uint16_t seed_len = 0U;
+    assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, sizeof(seed)) ==
+           UDS_RESULT_OK);
+    assert(seed_len == 16U);
+    assert(seed[0] == 0x40U && seed[1] == 0x41U);
+
+    /* Reset entropy source back to default CSPRNG */
+    uds_security_app_set_entropy_source(NULL);
+
+    /* 2. Test master key provisioning */
+    const uint8_t custom_master_key[16] = {0x01U, 0x12U, 0x23U, 0x34U, 0x45U, 0x56U, 0x67U, 0x78U,
+                                           0x89U, 0x9AU, 0xABU, 0xBCU, 0xCDU, 0xDEU, 0xEFU, 0xF0U};
+    assert(uds_security_app_provision_master_key(custom_master_key));
+    assert(uds_security_app_has_provisioned_key());
+
+    uint8_t key_provisioned[16] = {0U};
+    assert(uds_security_app_calculate_key_level2(seed, key_provisioned));
+
+    /* Key must verify against the provisioned master key */
+    assert(uds_security_app_key(NULL, UDS_SECURITY_LEVEL_2, key_provisioned,
+                                sizeof(key_provisioned)) == UDS_RESULT_OK);
+
+    /* 3. Test custom key provider (e.g. HSM / secure element) */
+    uds_security_app_set_key_provider(mock_key_provider);
+    assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, sizeof(seed)) ==
+           UDS_RESULT_OK);
+    uint8_t key_hsm[16] = {0U};
+    assert(uds_security_app_calculate_key_level2(seed, key_hsm));
+    assert(key_hsm[0] == (uint8_t)(seed[0] ^ 0xEEU));
+    assert(uds_security_app_key(NULL, UDS_SECURITY_LEVEL_2, key_hsm, sizeof(key_hsm)) ==
+           UDS_RESULT_OK);
+
+    /* Clean up key provider */
+    uds_security_app_set_key_provider(NULL);
+}
+
 int main(void) {
     test_direct_security_app_level1();
     test_direct_security_app_level2();
     test_direct_security_app_invalid_levels();
     test_server_multilevel_security_access();
     test_server_security_error_handling();
+    test_key_provisioning_and_entropy();
     return 0;
 }

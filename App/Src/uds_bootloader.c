@@ -1,4 +1,5 @@
 #include "uds_bootloader.h"
+#include "uds_platform.h"
 
 #if defined(USE_HAL_DRIVER) || defined(STM32F767xx) || defined(STM32C092xx)
 #include "main.h"
@@ -145,6 +146,142 @@ static uint32_t bootloader_calc_crc32(const uint8_t *data, uint32_t length) {
         }
     }
     return value ^ 0xFFFFFFFFUL;
+}
+
+static const uint8_t s_oem_root_pubkey[16] = {0xD4U, 0x51U, 0x86U, 0x93U, 0xB6U, 0xA2U,
+                                              0x54U, 0x07U, 0x38U, 0x8BU, 0x22U, 0xF6U,
+                                              0x1BU, 0x8CU, 0x0DU, 0x48U};
+
+static UdsBootloaderSignatureVerifierFn s_signature_verifier = NULL;
+static bool s_signature_required = true;
+
+#if !defined(HAL_FLASH_MODULE_ENABLED)
+static uint8_t s_mock_nvm_storage[sizeof(FirmwareMetadata_t)];
+static bool s_mock_nvm_valid = false;
+#endif
+
+static void bootloader_nvm_save_metadata(const FirmwareMetadata_t *meta) {
+    if (meta == NULL) {
+        return;
+    }
+#if defined(HAL_FLASH_MODULE_ENABLED)
+    (void)meta;
+#else
+    (void)memcpy(s_mock_nvm_storage, meta, sizeof(FirmwareMetadata_t));
+    s_mock_nvm_valid = true;
+#endif
+}
+
+static bool bootloader_nvm_load_metadata(FirmwareMetadata_t *meta) {
+    if (meta == NULL) {
+        return false;
+    }
+#if defined(HAL_FLASH_MODULE_ENABLED)
+    return false;
+#else
+    if (!s_mock_nvm_valid) {
+        return false;
+    }
+    (void)memcpy(meta, s_mock_nvm_storage, sizeof(FirmwareMetadata_t));
+    return (meta->magic == UDS_BL_METADATA_MAGIC);
+#endif
+}
+
+static void hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *msg, size_t msg_len,
+                        uint8_t *out) {
+    uint8_t k_pad[64];
+    uint8_t tk[32];
+    if (key_len > 64U) {
+        Sha256Ctx kctx;
+        sha256_init(&kctx);
+        sha256_update(&kctx, key, key_len);
+        sha256_final(&kctx, tk);
+        key = tk;
+        key_len = 32U;
+    }
+    (void)memset(k_pad, 0x36, sizeof(k_pad));
+    for (size_t i = 0U; i < key_len; ++i) {
+        k_pad[i] = (uint8_t)(k_pad[i] ^ key[i]);
+    }
+    Sha256Ctx ctx;
+    sha256_init(&ctx);
+    sha256_update(&ctx, k_pad, sizeof(k_pad));
+    sha256_update(&ctx, msg, msg_len);
+    uint8_t inner[32];
+    sha256_final(&ctx, inner);
+
+    (void)memset(k_pad, 0x5cU, sizeof(k_pad));
+    for (size_t i = 0U; i < key_len; ++i) {
+        k_pad[i] = (uint8_t)(k_pad[i] ^ key[i]);
+    }
+    sha256_init(&ctx);
+    sha256_update(&ctx, k_pad, sizeof(k_pad));
+    sha256_update(&ctx, inner, sizeof(inner));
+    sha256_final(&ctx, out);
+}
+
+void uds_bootloader_set_signature_verifier(UdsBootloaderSignatureVerifierFn verifier) {
+    s_signature_verifier = verifier;
+}
+
+void uds_bootloader_set_signature_required(bool required) {
+    s_signature_required = required;
+}
+
+void uds_bootloader_calculate_manifest_signature(const uint8_t digest32[32],
+                                                 uint8_t signature64[64]) {
+    if ((digest32 == NULL) || (signature64 == NULL)) {
+        return;
+    }
+    (void)memset(signature64, 0, 64U);
+    hmac_sha256(s_oem_root_pubkey, sizeof(s_oem_root_pubkey), digest32, 32U, &signature64[0]);
+    uint8_t tag_key[16];
+    for (size_t i = 0U; i < 16U; ++i) {
+        tag_key[i] = (uint8_t)(s_oem_root_pubkey[i] ^ 0xAAU);
+    }
+    hmac_sha256(tag_key, sizeof(tag_key), &signature64[0], 32U, &signature64[32]);
+}
+
+bool uds_bootloader_verify_signature(const uint8_t digest32[32], const uint8_t signature64[64]) {
+    if ((digest32 == NULL) || (signature64 == NULL)) {
+        return false;
+    }
+    if (s_signature_verifier != NULL) {
+        return s_signature_verifier(digest32, signature64);
+    }
+    uint8_t expected_sig[64];
+    uds_bootloader_calculate_manifest_signature(digest32, expected_sig);
+    uint8_t diff = 0U;
+    for (uint8_t i = 0U; i < 64U; ++i) {
+        diff |= (uint8_t)(signature64[i] ^ expected_sig[i]);
+    }
+    return (diff == 0U);
+}
+
+UdsBootloaderSlotStatus uds_bootloader_get_slot_status(void) {
+    return (UdsBootloaderSlotStatus)s_bl_ctx.staging_metadata.status;
+}
+
+UdsDownloadResult uds_bootloader_confirm_active_image(void) {
+    if (s_bl_ctx.staging_metadata.status != (uint8_t)UDS_BL_SLOT_ACTIVE) {
+        return UDS_DOWNLOAD_SEQUENCE_ERROR;
+    }
+    s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_CONFIRMED;
+    s_bl_ctx.staging_metadata.boot_attempts = 0U;
+    bootloader_nvm_save_metadata(&s_bl_ctx.staging_metadata);
+    return UDS_DOWNLOAD_OK;
+}
+
+UdsDownloadResult uds_bootloader_rollback_candidate(void) {
+    s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_ROLLBACK;
+    s_bl_ctx.active_slot_addr = (s_bl_ctx.target == UDS_BL_TARGET_STM32C092)
+                                    ? UDS_BL_C092_APP_SLOT_A_START
+                                    : UDS_BL_F767_APP_SLOT_A_START;
+    s_bl_ctx.active_version = 1U;
+    s_bl_ctx.candidate_verified = false;
+    s_bl_ctx.staging_metadata.active_slot = 0U;
+    bootloader_nvm_save_metadata(&s_bl_ctx.staging_metadata);
+    return UDS_DOWNLOAD_OK;
 }
 
 static UdsDownloadResult bootloader_flash_erase_start(void *context, uint32_t address,
@@ -319,11 +456,10 @@ static UdsDownloadResult bootloader_flash_verify(void *context, const UdsDownloa
     uint32_t mock_len = (metadata->image_address >= s_bl_ctx.target_slot_addr)
                             ? s_mock_flash_slot_b_len
                             : s_mock_flash_slot_a_len;
-    if ((mock_len > 0U) && (mock_len >= metadata->image_length)) {
-        computed_flash_crc = bootloader_calc_crc32(mock_buf, metadata->image_length);
-    } else {
-        computed_flash_crc = metadata->crc32 ^ 0xFFFFFFFFUL;
+    if ((mock_len == 0U) || (mock_len < metadata->image_length)) {
+        return UDS_DOWNLOAD_VERIFY_ERROR;
     }
+    computed_flash_crc = bootloader_calc_crc32(mock_buf, metadata->image_length);
 #endif
 
     if (has_expected_crc32) {
@@ -417,7 +553,11 @@ UdsDownloadResult uds_bootloader_activate_candidate(void) {
     /* 4. Update active version and slot status */
     s_bl_ctx.active_version = s_bl_ctx.staging_metadata.version;
     s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_ACTIVE;
+    s_bl_ctx.staging_metadata.boot_attempts = 1U;
+    s_bl_ctx.staging_metadata.max_attempts = 3U;
+    s_bl_ctx.staging_metadata.active_slot = 0U;
     s_bl_ctx.candidate_verified = false;
+    bootloader_nvm_save_metadata(&s_bl_ctx.staging_metadata);
     return UDS_DOWNLOAD_OK;
 }
 
@@ -430,6 +570,9 @@ void uds_bootloader_set_target(UdsBootloaderTarget target) {
     s_bl_ctx.last_check_memory_result = 0x01U;
     s_bl_ctx.last_check_dependencies_result = 0x01U;
     (void)memset(&s_bl_ctx.staging_metadata, 0, sizeof(s_bl_ctx.staging_metadata));
+    s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_CONFIRMED;
+    s_bl_ctx.staging_metadata.active_slot = 0U;
+    s_signature_required = true;
 
     if (target == UDS_BL_TARGET_STM32C092) {
         s_bl_ctx.active_slot_addr = UDS_BL_C092_APP_SLOT_A_START;
@@ -499,6 +642,19 @@ void uds_bootloader_init(void) {
 #else
     uds_bootloader_set_target(UDS_BL_TARGET_STM32F767);
 #endif
+    FirmwareMetadata_t loaded_meta;
+    if (bootloader_nvm_load_metadata(&loaded_meta)) {
+        s_bl_ctx.staging_metadata = loaded_meta;
+        if (loaded_meta.status == (uint8_t)UDS_BL_SLOT_ACTIVE) {
+            s_bl_ctx.staging_metadata.boot_attempts =
+                (uint8_t)(s_bl_ctx.staging_metadata.boot_attempts + 1U);
+            if (s_bl_ctx.staging_metadata.boot_attempts > s_bl_ctx.staging_metadata.max_attempts) {
+                (void)uds_bootloader_rollback_candidate();
+            } else {
+                bootloader_nvm_save_metadata(&s_bl_ctx.staging_metadata);
+            }
+        }
+    }
 }
 
 UdsBootloaderTarget uds_bootloader_get_target(void) {
@@ -533,11 +689,12 @@ UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t addres
         ((address + length) > (s_bl_ctx.target_slot_addr + s_bl_ctx.target_slot_size))) {
         return UDS_RESULT_OUT_OF_RANGE;
     }
-    UdsDownloadResult res = uds_download_begin(&s_bl_download, address, length, 0U);
+    uint32_t now_ms = uds_platform_now_ms();
+    UdsDownloadResult res = uds_download_begin(&s_bl_download, address, length, now_ms);
     if (res != UDS_DOWNLOAD_OK) {
         return (res == UDS_DOWNLOAD_OUT_OF_RANGE) ? UDS_RESULT_OUT_OF_RANGE : UDS_RESULT_ERROR;
     }
-    (void)uds_download_poll_erase(&s_bl_download, 0U);
+    (void)uds_download_poll_erase(&s_bl_download, now_ms);
     *max_block_length = s_bl_memory_map.max_block_length;
     s_bl_ctx.download_in_progress = true;
     s_bl_ctx.candidate_verified = false;
@@ -551,10 +708,12 @@ UdsCallbackResult uds_bootloader_transfer_data(void *context, uint8_t block_sequ
     if (!s_bl_ctx.download_in_progress) {
         return UDS_RESULT_SEQUENCE_ERROR;
     }
+    uint32_t now_ms = uds_platform_now_ms();
     if (uds_download_state(&s_bl_download) == UDS_DOWNLOAD_ERASING) {
-        (void)uds_download_poll_erase(&s_bl_download, 0U);
+        (void)uds_download_poll_erase(&s_bl_download, now_ms);
     }
-    UdsDownloadResult res = uds_download_write(&s_bl_download, block_sequence, data, length, 0U);
+    UdsDownloadResult res =
+        uds_download_write(&s_bl_download, block_sequence, data, length, now_ms);
     if (res != UDS_DOWNLOAD_OK) {
         return (res == UDS_DOWNLOAD_SEQUENCE_ERROR) ? UDS_RESULT_SEQUENCE_ERROR : UDS_RESULT_ERROR;
     }
@@ -577,7 +736,9 @@ UdsCallbackResult uds_bootloader_transfer_exit(void *context, const uint8_t *req
                        ((uint32_t)request[2] << 8U) | (uint32_t)request[3];
         has_expected_crc = true;
     }
-    UdsDownloadResult res = uds_download_finish(&s_bl_download, expected_crc, has_expected_crc, 0U);
+    uint32_t now_ms = uds_platform_now_ms();
+    UdsDownloadResult res =
+        uds_download_finish(&s_bl_download, expected_crc, has_expected_crc, now_ms);
     s_bl_ctx.download_in_progress = false;
     if (res != UDS_DOWNLOAD_OK) {
         uds_download_abort(&s_bl_download);
@@ -673,8 +834,20 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
             return UDS_RESULT_ERROR;
         }
 
+        /* 5. Cryptographic signature verification */
+        if (s_signature_required) {
+            if (!uds_bootloader_verify_signature(meta->sha256, meta->signature)) {
+                s_bl_ctx.last_check_memory_result = 0x04U;
+                out[0] = 0x04U; /* 0x04: Signature verification failed */
+                *out_len = 1U;
+                return UDS_RESULT_SECURITY_DENIED;
+            }
+        }
+
         /* All checks passed: mark candidate verified and ready for activation */
         s_bl_ctx.staging_metadata = *meta;
+        s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_CANDIDATE;
+        bootloader_nvm_save_metadata(&s_bl_ctx.staging_metadata);
         s_bl_ctx.candidate_verified = true;
         s_bl_ctx.last_check_memory_result = 0x00U;
         s_bl_ctx.last_check_dependencies_result = 0x00U;

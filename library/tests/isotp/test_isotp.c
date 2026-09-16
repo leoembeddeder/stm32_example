@@ -503,6 +503,103 @@ static void test_timeouts_and_sequence(void) {
     assert(!rx.active);
 }
 
+static uint32_t s_mock_clock_us_val = 0U;
+static uint32_t mock_clock_us(void *context) {
+    (void)context;
+    return s_mock_clock_us_val;
+}
+
+static void test_microsecond_stmin(void) {
+    IsoTpConfig config;
+    IsoTpTx test_tx;
+    IsoTpCanFrame frame;
+    uint8_t data[200] = {0};
+
+    isotp_config_can_fd(&config, 64U, 64U);
+    s_mock_clock_us_val = 1000000U;
+    isotp_config_set_clock_us(&config, mock_clock_us, NULL);
+
+    isotp_tx_init(&test_tx, &config, 0x7E0U, 0x7E8U);
+    assert(isotp_tx_start(&test_tx, data, 200U, 0U, &frame) == ISOTP_TX_FRAME_READY);
+
+    /* Feed Flow Control CTS with STmin = 0xF2 (200 microseconds) */
+    IsoTpCanFrame fc = fc_frame(true, 0x7E0U, ISOTP_FC_CTS, 0U, 0xF2U);
+    assert(isotp_tx_feed_flow_control(&test_tx, &fc, 0U) == ISOTP_OK);
+
+    /* At t=1,000,000 us: First consecutive frame should be immediately ready */
+    assert(isotp_tx_next(&test_tx, 0U, &frame) == ISOTP_TX_FRAME_READY);
+
+    /* At t=1,000,100 us: 200 us has NOT elapsed yet -> should return ISOTP_OK (not ready) */
+    s_mock_clock_us_val = 1000100U;
+    assert(isotp_tx_next(&test_tx, 0U, &frame) == ISOTP_OK);
+
+    /* At t=1,000,200 us: 200 us HAS elapsed -> should be ready */
+    s_mock_clock_us_val = 1000200U;
+    assert(isotp_tx_next(&test_tx, 0U, &frame) == ISOTP_TX_FRAME_READY);
+}
+
+static void test_rx_flow_control_overflow(void) {
+    IsoTpConfig config;
+    IsoTpRx test_rx;
+    IsoTpRxEvent event;
+    IsoTpCanFrame frame = {0};
+
+    isotp_config_can_fd(&config, 64U, 64U);
+    isotp_rx_init(&test_rx, &config, 0x7E0U, 0x7E8U);
+    frame.can_id = 0x7E0U;
+    frame.is_fd = true;
+    frame.dlc = 64U;
+    frame.data[0] = 0x10U;
+    frame.data[1] = 0x00U;
+    /* 32-bit length = 100,000 bytes > ISOTP_MAX_PAYLOAD */
+    frame.data[2] = 0x00U;
+    frame.data[3] = 0x01U;
+    frame.data[4] = 0x86U;
+    frame.data[5] = 0xA0U;
+
+    IsoTpStatus status = isotp_rx_feed(&test_rx, &frame, 0U, &event);
+    assert(status == ISOTP_ERR_OVERFLOW);
+    assert(event.has_flow_control == true);
+    /* Verify Flow Control FlowStatus is OVERFLOW (0x32) */
+    assert((event.flow_control.data[0] & 0x0FU) == ISOTP_FC_OVERFLOW);
+    assert(!test_rx.active);
+}
+
+static void test_strict_rx_dl_validation(void) {
+    IsoTpConfig config;
+    IsoTpRx test_rx;
+    IsoTpRxEvent event;
+    IsoTpCanFrame frame = {0};
+
+    /* 1. CAN FD: Incoming DLC > rx_dl must be rejected */
+    isotp_config_can_fd(&config, 64U, 16U);
+    isotp_rx_init(&test_rx, &config, 0x7E0U, 0x7E8U);
+
+    frame.can_id = 0x7E0U;
+    frame.is_fd = true;
+    frame.dlc = 32U; /* Greater than rx_dl (16U) */
+    frame.data[0] = 0x00U;
+    frame.data[1] = 10U;
+
+    assert(isotp_rx_feed(&test_rx, &frame, 0U, &event) == ISOTP_ERR_ARGUMENT);
+
+    /* 2. CAN FD: Non-discrete DLC (e.g. 10) must be rejected */
+    frame.dlc = 10U;
+    assert(isotp_rx_feed(&test_rx, &frame, 0U, &event) == ISOTP_ERR_ARGUMENT);
+
+    /* 3. Classic CAN: DLC > 8 must be rejected */
+    isotp_config_classic_can(&config);
+    isotp_rx_init(&test_rx, &config, 0x7E0U, 0x7E8U);
+    frame.is_fd = false;
+    frame.dlc = 9U;
+    assert(isotp_rx_feed(&test_rx, &frame, 0U, &event) == ISOTP_ERR_ARGUMENT);
+
+    /* 4. Single Frame where declared length exceeds DLC - header must return FORMAT error */
+    frame.dlc = 4U;
+    frame.data[0] = 0x05U; /* SF length = 5, but frame DLC is only 4 (max payload = 3) */
+    assert(isotp_rx_feed(&test_rx, &frame, 0U, &event) == ISOTP_ERR_FORMAT);
+}
+
 int main(void) {
     test_padding();
     test_full_duplex_rx_restart();
@@ -520,5 +617,8 @@ int main(void) {
     test_tx_bs_preserves_sequence_number();
     test_tx_bs_respects_stmin();
     test_timeouts_and_sequence();
+    test_microsecond_stmin();
+    test_rx_flow_control_overflow();
+    test_strict_rx_dl_validation();
     return 0;
 }

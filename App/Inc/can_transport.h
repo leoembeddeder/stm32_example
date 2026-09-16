@@ -13,12 +13,15 @@ typedef struct {
     uint32_t response_id;
     /* Bitmask of HAL mailboxes accepted but not yet reported idle. */
     uint32_t tx_mailbox_mask;
+    bool tx_error_occurred;
 } UdsCanTransport;
 
 void uds_can_transport_init(UdsCanTransport *transport, CAN_HandleTypeDef *hcan,
                             uint32_t request_id, uint32_t response_id);
 bool uds_can_transport_send(void *context, const IsoTpCanFrame *frame);
 bool uds_can_transport_tx_complete(void *context);
+bool uds_can_transport_tx_error(void *context);
+bool uds_can_transport_recover(UdsCanTransport *transport);
 uint32_t uds_can_transport_clock(void *context);
 
 #endif

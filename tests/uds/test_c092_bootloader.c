@@ -90,11 +90,21 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
                                       0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
     (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
 
+    /* Missing / invalid signature must be rejected with 0x04 / SECURITY_DENIED */
+    assert(uds_bootloader_routine_control(
+               NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY, (const uint8_t *)&meta, sizeof(meta),
+               routine_out, &routine_out_len, sizeof(routine_out)) == UDS_RESULT_SECURITY_DENIED);
+    assert(routine_out[0] == 0x04U); /* 0x04: Signature verification failed */
+
+    /* Compute valid cryptographic signature */
+    uds_bootloader_calculate_manifest_signature(meta.sha256, meta.signature);
+
     assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
                                           (const uint8_t *)&meta, sizeof(meta), routine_out,
                                           &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out[0] == 0x00U); /* Verification Passed */
     assert(uds_bootloader_is_activation_pending());
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_CANDIDATE);
 
     /* 7. RoutineControl 0xFF01: CheckProgrammingDependencies */
     /* 7a. Subfunction 0x01: startRoutine -> Dependencies check should succeed */
@@ -189,6 +199,7 @@ static void test_c092_activate_candidate(void) {
                                       0x27U, 0xaeU, 0x41U, 0xe4U, 0x64U, 0x9bU, 0x93U, 0x4cU,
                                       0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
     (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
+    uds_bootloader_calculate_manifest_signature(meta.sha256, meta.signature);
 
     uint8_t routine_out[16];
     uint16_t routine_out_len = 0U;
@@ -197,11 +208,17 @@ static void test_c092_activate_candidate(void) {
                                           &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out[0] == 0x00U);
     assert(uds_bootloader_is_activation_pending());
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_CANDIDATE);
 
     /* 3. Execute Copy-on-Reset candidate activation from Slot B to Slot A */
     assert(uds_bootloader_activate_candidate() == UDS_DOWNLOAD_OK);
     assert(uds_bootloader_get_active_version() == 3U);
     assert(!uds_bootloader_is_activation_pending());
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_ACTIVE);
+
+    /* Confirm active image in persistent journal */
+    assert(uds_bootloader_confirm_active_image() == UDS_DOWNLOAD_OK);
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_CONFIRMED);
 
     /* 4. Subsequent activation without new candidate must fail */
     assert(uds_bootloader_activate_candidate() == UDS_DOWNLOAD_SEQUENCE_ERROR);
