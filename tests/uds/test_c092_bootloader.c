@@ -99,17 +99,15 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
     /* 7. RoutineControl 0xFF01: CheckProgrammingDependencies */
     /* 7a. Subfunction 0x01: startRoutine -> Dependencies check should succeed */
     assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_START_ROUTINE,
-                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U,
-                                          routine_out, &routine_out_len,
-                                          sizeof(routine_out)) == UDS_RESULT_OK);
+                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U, routine_out,
+                                          &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out_len == 1U);
     assert(routine_out[0] == 0x00U); /* 0x00: Dependencies satisfied */
 
     /* 7b. Subfunction 0x03: requestRoutineResults -> Should return 0x00 */
     assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS,
-                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U,
-                                          routine_out, &routine_out_len,
-                                          sizeof(routine_out)) == UDS_RESULT_OK);
+                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U, routine_out,
+                                          &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out_len == 1U);
     assert(routine_out[0] == 0x00U);
 

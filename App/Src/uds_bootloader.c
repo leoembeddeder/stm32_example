@@ -691,15 +691,15 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         }
 
         /* Routine 0xFF01: Check Programming Dependencies (ISO 14229-1 / OEM Flashing) */
-        bool dependencies_ok = s_bl_ctx.candidate_verified &&
-                               (!s_bl_ctx.download_in_progress) &&
+        bool dependencies_ok = s_bl_ctx.candidate_verified && (!s_bl_ctx.download_in_progress) &&
                                (s_bl_ctx.staging_metadata.magic == UDS_BL_METADATA_MAGIC);
 #if defined(HAL_FLASH_MODULE_ENABLED)
-        dependencies_ok = dependencies_ok &&
-                          uds_bootloader_is_application_valid(s_bl_ctx.target_slot_addr);
+        dependencies_ok =
+            dependencies_ok && uds_bootloader_is_application_valid(s_bl_ctx.target_slot_addr);
 #endif
 
-        uint8_t status = (uint8_t)(dependencies_ok ? 0x00U : 0x01U); /* 0x00: dependencies satisfied */
+        uint8_t status =
+            (uint8_t)(dependencies_ok ? 0x00U : 0x01U); /* 0x00: dependencies satisfied */
         s_bl_ctx.last_check_dependencies_result = status;
         out[0] = status;
         *out_len = 1U;

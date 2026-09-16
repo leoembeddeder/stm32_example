@@ -1,14 +1,15 @@
 #include "uds_app_fdcan.h"
 
 #include "uds_app_config.h"
-#include "uds_auth_app.h"
-#include "uds_bootloader.h"
-#include "uds_did_app.h"
-#include "uds_dtc_app.h"
-#include "uds_memory_app.h"
 #include "uds_platform_fdcan.h"
-#include "uds_security_app.h"
+#include "uds_iso_tp/uds.h"
+#include "uds_iso_tp/uds_download.h"
+#include "uds_iso_tp/uds_dtc.h"
 #include "uds_iso_tp/uds_services.h"
+
+#ifndef STM32_UDS_ISO_TP_UDS_BOOTLOADER_H
+typedef enum { UDS_BL_TARGET_STM32F767 = 0, UDS_BL_TARGET_STM32C092 = 1 } UdsBootloaderTarget;
+#endif
 
 #include <stddef.h>
 #include <string.h>
@@ -48,8 +49,8 @@ __attribute__((weak)) UdsCallbackResult uds_did_app_read(void *context, uint16_t
     (void)capacity;
     return UDS_RESULT_OUT_OF_RANGE;
 }
-__attribute__((weak)) UdsCallbackResult uds_did_app_write(void *context, uint16_t did, const uint8_t *data,
-                                                          uint16_t length) {
+__attribute__((weak)) UdsCallbackResult uds_did_app_write(void *context, uint16_t did,
+                                                          const uint8_t *data, uint16_t length) {
     (void)context;
     (void)did;
     (void)data;
@@ -58,8 +59,9 @@ __attribute__((weak)) UdsCallbackResult uds_did_app_write(void *context, uint16_
 }
 
 __attribute__((weak)) void uds_security_app_init(void) {}
-__attribute__((weak)) UdsCallbackResult uds_security_app_seed(void *context, uint8_t level, uint8_t *seed,
-                                                              uint16_t *length, uint16_t capacity) {
+__attribute__((weak)) UdsCallbackResult uds_security_app_seed(void *context, uint8_t level,
+                                                              uint8_t *seed, uint16_t *length,
+                                                              uint16_t capacity) {
     (void)context;
     (void)level;
     (void)seed;
@@ -67,8 +69,8 @@ __attribute__((weak)) UdsCallbackResult uds_security_app_seed(void *context, uin
     (void)capacity;
     return UDS_RESULT_OUT_OF_RANGE;
 }
-__attribute__((weak)) UdsCallbackResult uds_security_app_key(void *context, uint8_t level, const uint8_t *key,
-                                                             uint16_t length) {
+__attribute__((weak)) UdsCallbackResult uds_security_app_key(void *context, uint8_t level,
+                                                             const uint8_t *key, uint16_t length) {
     (void)context;
     (void)level;
     (void)key;
@@ -89,25 +91,27 @@ __attribute__((weak)) UdsDownloadResult uds_bootloader_activate_candidate(void) 
 __attribute__((weak)) void uds_bootloader_jump_to_app(uint32_t app_vector_addr) {
     (void)app_vector_addr;
 }
-__attribute__((weak)) UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t address,
-                                                                        uint32_t length, uint16_t *max_block_length) {
+__attribute__((weak)) UdsCallbackResult uds_bootloader_request_download(
+    void *context, uint32_t address, uint32_t length, uint16_t *max_block_length) {
     (void)context;
     (void)address;
     (void)length;
     (void)max_block_length;
     return UDS_RESULT_OUT_OF_RANGE;
 }
-__attribute__((weak)) UdsCallbackResult uds_bootloader_transfer_data(void *context, uint8_t block_sequence,
-                                                                     const uint8_t *data, uint16_t length) {
+__attribute__((weak)) UdsCallbackResult uds_bootloader_transfer_data(void *context,
+                                                                     uint8_t block_sequence,
+                                                                     const uint8_t *data,
+                                                                     uint16_t length) {
     (void)context;
     (void)block_sequence;
     (void)data;
     (void)length;
     return UDS_RESULT_OUT_OF_RANGE;
 }
-__attribute__((weak)) UdsCallbackResult uds_bootloader_transfer_exit(void *context, const uint8_t *request,
-                                                                     uint16_t request_len, uint8_t *response,
-                                                                     uint16_t *response_len, uint16_t capacity) {
+__attribute__((weak)) UdsCallbackResult
+uds_bootloader_transfer_exit(void *context, const uint8_t *request, uint16_t request_len,
+                             uint8_t *response, uint16_t *response_len, uint16_t capacity) {
     (void)context;
     (void)request;
     (void)request_len;
@@ -116,10 +120,9 @@ __attribute__((weak)) UdsCallbackResult uds_bootloader_transfer_exit(void *conte
     (void)capacity;
     return UDS_RESULT_OUT_OF_RANGE;
 }
-__attribute__((weak)) UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunction,
-                                                                       uint16_t routine_id, const uint8_t *in,
-                                                                       uint16_t in_len, uint8_t *out,
-                                                                       uint16_t *out_len, uint16_t capacity) {
+__attribute__((weak)) UdsCallbackResult uds_bootloader_routine_control(
+    void *context, uint8_t subfunction, uint16_t routine_id, const uint8_t *in, uint16_t in_len,
+    uint8_t *out, uint16_t *out_len, uint16_t capacity) {
     (void)context;
     (void)subfunction;
     (void)routine_id;
@@ -145,8 +148,8 @@ void uds_dtc_app_init(void);
 const UdsDtcBackend *uds_dtc_app_get_backend(void);
 UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc);
 void uds_did_app_init(void);
-UdsCallbackResult uds_did_app_read(void *context, uint16_t did, uint8_t *data,
-                                   uint16_t *length, uint16_t capacity);
+UdsCallbackResult uds_did_app_read(void *context, uint16_t did, uint8_t *data, uint16_t *length,
+                                   uint16_t capacity);
 UdsCallbackResult uds_did_app_write(void *context, uint16_t did, const uint8_t *data,
                                     uint16_t length);
 void uds_security_app_init(void);
@@ -159,8 +162,8 @@ void uds_bootloader_set_target(UdsBootloaderTarget target);
 bool uds_bootloader_is_activation_pending(void);
 UdsDownloadResult uds_bootloader_activate_candidate(void);
 void uds_bootloader_jump_to_app(uint32_t app_vector_addr);
-UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t address,
-                                                  uint32_t length, uint16_t *max_block_length);
+UdsCallbackResult uds_bootloader_request_download(void *context, uint32_t address, uint32_t length,
+                                                  uint16_t *max_block_length);
 UdsCallbackResult uds_bootloader_transfer_data(void *context, uint8_t block_sequence,
                                                const uint8_t *data, uint16_t length);
 UdsCallbackResult uds_bootloader_transfer_exit(void *context, const uint8_t *request,
@@ -168,8 +171,8 @@ UdsCallbackResult uds_bootloader_transfer_exit(void *context, const uint8_t *req
                                                uint16_t *response_len, uint16_t capacity);
 UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunction,
                                                  uint16_t routine_id, const uint8_t *in,
-                                                 uint16_t in_len, uint8_t *out,
-                                                 uint16_t *out_len, uint16_t capacity);
+                                                 uint16_t in_len, uint8_t *out, uint16_t *out_len,
+                                                 uint16_t capacity);
 void uds_auth_app_init(void);
 const UdsAuthenticationServiceBackend *uds_auth_app_get_backend(void);
 void uds_memory_app_init(void);

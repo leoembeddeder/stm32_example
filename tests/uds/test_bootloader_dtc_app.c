@@ -232,16 +232,14 @@ static void test_bootloader_flow(void) {
 
     /* 6. RoutineControl 0xFF01: CheckProgrammingDependencies */
     assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_START_ROUTINE,
-                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U,
-                                          routine_out, &routine_out_len,
-                                          sizeof(routine_out)) == UDS_RESULT_OK);
+                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U, routine_out,
+                                          &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out_len == 1U);
     assert(routine_out[0] == 0x00U);
 
     assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS,
-                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U,
-                                          routine_out, &routine_out_len,
-                                          sizeof(routine_out)) == UDS_RESULT_OK);
+                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U, routine_out,
+                                          &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out_len == 1U);
     assert(routine_out[0] == 0x00U);
 
