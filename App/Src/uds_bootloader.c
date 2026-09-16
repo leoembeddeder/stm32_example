@@ -1,5 +1,9 @@
 #include "uds_bootloader.h"
+#if defined(STM32C092xx)
+#include "uds_platform_fdcan.h"
+#else
 #include "uds_platform.h"
+#endif
 
 #if defined(USE_HAL_DRIVER) || defined(STM32F767xx) || defined(STM32C092xx)
 #include "main.h"

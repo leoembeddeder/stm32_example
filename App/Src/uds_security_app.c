@@ -3,7 +3,11 @@
  */
 #include "uds_security_app.h"
 
+#if defined(STM32C092xx)
+#include "uds_platform_fdcan.h"
+#else
 #include "uds_platform.h"
+#endif
 #include "uds_security_cmac.h"
 
 #include <string.h>

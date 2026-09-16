@@ -1,6 +1,11 @@
 #include "uds_platform_fdcan.h"
 
+#if defined(USE_HAL_DRIVER)
 #include "stm32c0xx_hal.h"
+#else
+uint32_t HAL_GetTick(void);
+void NVIC_SystemReset(void);
+#endif
 
 UdsC092ResetPending uds_c092_reset_pending = {0U, 0U};
 
@@ -52,3 +57,19 @@ uint32_t uds_platform_systick_val(void) {
     return HAL_GetTick();
 #endif
 }
+
+uint32_t uds_platform_now_ms(void) {
+    return uds_c092_platform_now_ms();
+}
+
+bool uds_platform_trng_get_random(uint8_t *buffer, size_t length) {
+    (void)buffer;
+    (void)length;
+    return false;
+}
+
+void uds_platform_system_reset(uint8_t reset_type) {
+    uds_c092_platform_system_reset(reset_type);
+}
+
+void uds_platform_error(void) {}

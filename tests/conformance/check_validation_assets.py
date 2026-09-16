@@ -56,6 +56,7 @@ def main() -> int:
         "uds_app_fdcan.h",
         "uds_platform_fdcan.c",
         "uds_platform_fdcan.h",
+        "uds_platform.h",
         "README.md",
     }
     missing_files = sorted(name for name in c092_files if not (C092_DIR / name).is_file())

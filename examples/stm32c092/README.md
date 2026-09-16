@@ -58,6 +58,7 @@ App/Src/uds_auth_app.c
 > **DO NOT include `App/Src/can_transport.c`, `App/Src/uds_app.c`, or `App/Src/uds_platform.c` in an STM32C092 project.**
 > Those three files are specifically for STM32F767 (classic bxCAN `hcan1` peripheral).
 > The STM32C092 equivalents are `can_transport_fdcan.c`, `uds_app_fdcan.c`, and `uds_platform_fdcan.c`.
+> Platform bindings required by `uds_security_app.c` and `uds_bootloader.c` are fully provided by `uds_platform_fdcan.h` (and convenience alias `uds_platform.h`).
 
 The include paths in Keil C/C++ settings must contain:
 - `library/include`
