@@ -66,10 +66,10 @@ static void mix_columns(uint8_t state[16]) {
         uint8_t *value = &state[(size_t)column * 4U];
         uint8_t sum = (uint8_t)(value[0] ^ value[1] ^ value[2] ^ value[3]);
         uint8_t first = value[0];
-        value[0] ^= sum ^ xtime((uint8_t)(value[0] ^ value[1]));
-        value[1] ^= sum ^ xtime((uint8_t)(value[1] ^ value[2]));
-        value[2] ^= sum ^ xtime((uint8_t)(value[2] ^ value[3]));
-        value[3] ^= sum ^ xtime((uint8_t)(value[3] ^ first));
+        value[0] = (uint8_t)(value[0] ^ (uint8_t)(sum ^ xtime((uint8_t)(value[0] ^ value[1]))));
+        value[1] = (uint8_t)(value[1] ^ (uint8_t)(sum ^ xtime((uint8_t)(value[1] ^ value[2]))));
+        value[2] = (uint8_t)(value[2] ^ (uint8_t)(sum ^ xtime((uint8_t)(value[2] ^ value[3]))));
+        value[3] = (uint8_t)(value[3] ^ (uint8_t)(sum ^ xtime((uint8_t)(value[3] ^ first))));
     }
 }
 
@@ -98,10 +98,11 @@ void aes128_init(Aes128Context *context, const uint8_t key[16]) {
         word[0] ^= rcon(round);
         for (uint8_t index = 0U; index < 4U; ++index)
             context->round_keys[offset + index] =
-                context->round_keys[previous + index] ^ word[index];
+                (uint8_t)(context->round_keys[previous + index] ^ word[index]);
         for (uint8_t index = 4U; index < 16U; ++index)
             context->round_keys[offset + index] =
-                context->round_keys[previous + index] ^ context->round_keys[offset + index - 4U];
+                (uint8_t)(context->round_keys[previous + index] ^
+                          context->round_keys[(size_t)offset + (size_t)index - 4U]);
     }
 }
 

@@ -230,7 +230,22 @@ static void test_bootloader_flow(void) {
                                           &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
     assert(routine_out[0] == 0x00U);
 
-    /* 6. Vector Table Sanity Validation Gate (S32K144 / OpenBLT specification) */
+    /* 6. RoutineControl 0xFF01: CheckProgrammingDependencies */
+    assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_START_ROUTINE,
+                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U,
+                                          routine_out, &routine_out_len,
+                                          sizeof(routine_out)) == UDS_RESULT_OK);
+    assert(routine_out_len == 1U);
+    assert(routine_out[0] == 0x00U);
+
+    assert(uds_bootloader_routine_control(NULL, UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS,
+                                          UDS_BL_ROUTINE_CHECK_DEPENDENCIES, NULL, 0U,
+                                          routine_out, &routine_out_len,
+                                          sizeof(routine_out)) == UDS_RESULT_OK);
+    assert(routine_out_len == 1U);
+    assert(routine_out[0] == 0x00U);
+
+    /* 7. Vector Table Sanity Validation Gate (S32K144 / OpenBLT specification) */
     assert(!uds_bootloader_is_application_valid(0x00000000UL)); /* NULL address */
     assert(!uds_bootloader_is_application_valid(0x20000000UL)); /* RAM, not Flash */
     assert(!uds_bootloader_is_application_valid(0x08300000UL)); /* Beyond Flash size */

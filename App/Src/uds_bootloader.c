@@ -214,13 +214,25 @@ static UdsDownloadResult bootloader_flash_erase_poll(void *context) {
     if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY)) {
         return UDS_DOWNLOAD_BUSY;
     }
-    if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_OPERR | FLASH_FLAG_PROGERR | FLASH_FLAG_WRPERR |
-                             FLASH_FLAG_PGAERR | FLASH_FLAG_SIZERR | FLASH_FLAG_PGSERR |
-                             FLASH_FLAG_MISSERR | FLASH_FLAG_FASTERR)) {
+#if defined(FLASH_FLAG_ALL_ERRORS)
+    if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_ALL_ERRORS)) {
         __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
         HAL_FLASH_Lock();
         return UDS_DOWNLOAD_ERASE_ERROR;
     }
+#else
+    uint32_t err_flags = FLASH_FLAG_OPERR | FLASH_FLAG_PROGERR | FLASH_FLAG_WRPERR |
+                         FLASH_FLAG_PGAERR | FLASH_FLAG_SIZERR | FLASH_FLAG_PGSERR |
+                         FLASH_FLAG_FASTERR;
+#if defined(FLASH_FLAG_MISSERR)
+    err_flags |= FLASH_FLAG_MISSERR;
+#endif
+    if (__HAL_FLASH_GET_FLAG(err_flags)) {
+        __HAL_FLASH_CLEAR_FLAG(err_flags);
+        HAL_FLASH_Lock();
+        return UDS_DOWNLOAD_ERASE_ERROR;
+    }
+#endif
     HAL_FLASH_Lock();
 #endif
 #endif
@@ -416,6 +428,7 @@ void uds_bootloader_set_target(UdsBootloaderTarget target) {
     s_bl_ctx.candidate_verified = false;
     s_bl_ctx.last_erase_result = 0x00U;
     s_bl_ctx.last_check_memory_result = 0x01U;
+    s_bl_ctx.last_check_dependencies_result = 0x01U;
     (void)memset(&s_bl_ctx.staging_metadata, 0, sizeof(s_bl_ctx.staging_metadata));
 
     if (target == UDS_BL_TARGET_STM32C092) {
@@ -664,9 +677,33 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         s_bl_ctx.staging_metadata = *meta;
         s_bl_ctx.candidate_verified = true;
         s_bl_ctx.last_check_memory_result = 0x00U;
+        s_bl_ctx.last_check_dependencies_result = 0x00U;
         out[0] = 0x00U; /* 0x00 = Verification Passed */
         *out_len = 1U;
         return UDS_RESULT_OK;
+    }
+
+    if (routine_id == UDS_BL_ROUTINE_CHECK_DEPENDENCIES) {
+        if (subfunction == UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS) {
+            out[0] = s_bl_ctx.last_check_dependencies_result;
+            *out_len = 1U;
+            return UDS_RESULT_OK;
+        }
+
+        /* Routine 0xFF01: Check Programming Dependencies (ISO 14229-1 / OEM Flashing) */
+        bool dependencies_ok = s_bl_ctx.candidate_verified &&
+                               (!s_bl_ctx.download_in_progress) &&
+                               (s_bl_ctx.staging_metadata.magic == UDS_BL_METADATA_MAGIC);
+#if defined(HAL_FLASH_MODULE_ENABLED)
+        dependencies_ok = dependencies_ok &&
+                          uds_bootloader_is_application_valid(s_bl_ctx.target_slot_addr);
+#endif
+
+        uint8_t status = (uint8_t)(dependencies_ok ? 0x00U : 0x01U); /* 0x00: dependencies satisfied */
+        s_bl_ctx.last_check_dependencies_result = status;
+        out[0] = status;
+        *out_len = 1U;
+        return dependencies_ok ? UDS_RESULT_OK : UDS_RESULT_DENIED;
     }
 
     return UDS_RESULT_NOT_SUPPORTED;

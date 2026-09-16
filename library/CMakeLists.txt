@@ -85,13 +85,35 @@ if(UDS_ISO_TP_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/security/uds_security_reference.c)
     target_include_directories(uds_iso_tp_security_test_key PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/security
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(uds_iso_tp_security_test_key PRIVATE uds_iso_tp_crypto)
     target_compile_options(uds_iso_tp_security_test_key PRIVATE
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_security_reference_utility
              COMMAND uds_iso_tp_security_test_key 1 00112233)
     set_tests_properties(uds_iso_tp_security_reference_utility PROPERTIES
                          PASS_REGULAR_EXPRESSION "key  = A5 4B E1 0F")
+    add_test(NAME uds_iso_tp_security_reference_utility_level2
+             COMMAND uds_iso_tp_security_test_key 2 0102030405060708090a0b0c0d0e0f10)
+    set_tests_properties(uds_iso_tp_security_reference_utility_level2 PROPERTIES
+                         PASS_REGULAR_EXPRESSION "key  = ")
+
+    add_executable(uds_iso_tp_multilevel_security_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_multilevel_security.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_security_app.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_platform.c)
+    target_include_directories(uds_iso_tp_multilevel_security_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
+    target_link_libraries(uds_iso_tp_multilevel_security_test PRIVATE
+        uds_iso_tp_uds uds_iso_tp_crypto)
+    target_compile_options(uds_iso_tp_multilevel_security_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_multilevel_security_contract
+             COMMAND uds_iso_tp_multilevel_security_test)
 
     add_executable(uds_iso_tp_endpoint_test tests/uds/test_endpoint.c)
     target_link_libraries(uds_iso_tp_endpoint_test PRIVATE uds_iso_tp_uds)

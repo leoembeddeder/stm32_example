@@ -70,6 +70,7 @@ typedef enum { UDS_BL_TARGET_STM32F767 = 0, UDS_BL_TARGET_STM32C092 = 1 } UdsBoo
 
 #define UDS_BL_ROUTINE_ERASE_MEMORY 0xFF00U
 #define UDS_BL_ROUTINE_CHECK_MEMORY 0x0202U
+#define UDS_BL_ROUTINE_CHECK_DEPENDENCIES 0xFF01U
 
 #define UDS_ROUTINE_SUBFUNCTION_START_ROUTINE 0x01U
 #define UDS_ROUTINE_SUBFUNCTION_STOP_ROUTINE 0x02U
@@ -103,6 +104,7 @@ typedef struct {
     bool candidate_verified;
     uint8_t last_erase_result;
     uint8_t last_check_memory_result;
+    uint8_t last_check_dependencies_result;
     FirmwareMetadata_t staging_metadata;
 } UdsBootloaderContext;
 

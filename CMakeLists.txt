@@ -23,6 +23,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/uds_bootloader.c
     App/Src/uds_memory_app.c
     App/Src/uds_platform.c
+    App/Src/uds_security_app.c
     library/src/isotp.c
     library/src/uds.c
     library/src/uds_did.c

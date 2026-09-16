@@ -23,6 +23,11 @@ void uds_c092_platform_reset_execute(void *context, uint8_t subfunction) {
 uint32_t uds_c092_platform_now_ms(void) {
     return HAL_GetTick();
 }
+
+uint32_t uds_platform_systick_val(void) {
+    return 12345U;
+}
+
 static uint8_t event_head;
 static uint8_t event_tail;
 static HAL_StatusTypeDef enqueue_status = HAL_OK;
@@ -37,10 +42,14 @@ HAL_StatusTypeDef HAL_FDCAN_AddMessageToTxFifoQ(FDCAN_HandleTypeDef *hfdcan,
                                                 const FDCAN_TxHeaderTypeDef *header,
                                                 const uint8_t *data) {
     (void)hfdcan;
-    (void)header;
     if (data != NULL) {
         (void)memcpy(tx_data, data, sizeof(tx_data));
         tx_calls++;
+    }
+    if (header != NULL) {
+        event_queue[event_tail].MessageMarker = header->MessageMarker;
+        event_queue[event_tail].EventType = FDCAN_TX_EVENT;
+        event_tail = (uint8_t)((event_tail + 1U) % 8U);
     }
     return enqueue_status;
 }
@@ -101,5 +110,30 @@ int main(void) {
     assert(enqueue_status == HAL_OK);
     assert(tx_calls == 1U);
     assert(tx_data[0] == 0x06U && tx_data[1] == 0x50U && tx_data[2] == 0x01U);
+
+    /* 2. TesterPresent (0x3E 0x00) */
+    uds_c092_app_process(11U);
+    const uint8_t tester_present[] = {0x02U, 0x3EU, 0x00U};
+    uds_c092_app_rx_from_isr_ex(0x7E0U, tester_present, 3U, false, false, false, false);
+    uds_c092_app_process(12U);
+    assert(tx_calls == 2U);
+    assert(tx_data[1] == 0x7EU && tx_data[2] == 0x00U);
+
+    /* 3. ReadDataByIdentifier (0x22 0xF1 0x86 - ActiveSession) */
+    uds_c092_app_process(13U);
+    const uint8_t read_did[] = {0x03U, 0x22U, 0xF1U, 0x86U};
+    uds_c092_app_rx_from_isr_ex(0x7E0U, read_did, 4U, false, false, false, false);
+    uds_c092_app_process(14U);
+    assert(tx_calls == 3U);
+    assert(tx_data[1] == 0x62U && tx_data[2] == 0xF1U && tx_data[3] == 0x86U);
+
+    /* 4. ReadDTCInformation (0x19 0x01 0xFF - Number of DTCs) */
+    uds_c092_app_process(15U);
+    const uint8_t read_dtc[] = {0x03U, 0x19U, 0x01U, 0xFFU};
+    uds_c092_app_rx_from_isr_ex(0x7E0U, read_dtc, 4U, false, false, false, false);
+    uds_c092_app_process(16U);
+    assert(tx_calls == 4U);
+    assert(tx_data[1] == 0x59U && tx_data[2] == 0x01U);
+
     return 0;
 }

@@ -44,3 +44,11 @@ void uds_c092_platform_system_reset(uint8_t reset_type) {
 uint32_t uds_c092_platform_now_ms(void) {
     return HAL_GetTick();
 }
+
+uint32_t uds_platform_systick_val(void) {
+#if defined(SysTick)
+    return SysTick->VAL;
+#else
+    return HAL_GetTick();
+#endif
+}

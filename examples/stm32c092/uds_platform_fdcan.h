@@ -9,6 +9,7 @@ UdsCallbackResult uds_c092_platform_reset_prepare(void *context, uint8_t subfunc
 void uds_c092_platform_reset_execute(void *context, uint8_t subfunction);
 uint32_t uds_c092_platform_now_ms(void);
 void uds_c092_platform_system_reset(uint8_t reset_type);
+uint32_t uds_platform_systick_val(void);
 
 #ifndef UDS_C092_RESET_TX_WAIT_MS
 #define UDS_C092_RESET_TX_WAIT_MS 50U

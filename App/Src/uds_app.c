@@ -6,6 +6,7 @@
 #include "uds_did_app.h"
 #include "uds_dtc_app.h"
 #include "uds_memory_app.h"
+#include "uds_security_app.h"
 #include "uds_iso_tp/endpoint.h"
 #include "uds_iso_tp/uds.h"
 #include "uds_iso_tp/uds_services.h"
@@ -28,45 +29,6 @@ static volatile uint8_t s_rx_head;
 static volatile uint8_t s_rx_tail;
 static bool s_initialized;
 static UdsServiceBackends s_service_backends;
-
-static const uint8_t s_sec_master_key[16] = {0x2BU, 0x7EU, 0x15U, 0x16U, 0x28U, 0xAEU,
-                                             0xD2U, 0xA6U, 0xABU, 0xF7U, 0x15U, 0x88U,
-                                             0x09U, 0xCFU, 0x4FU, 0x3CU};
-
-static uint8_t s_sec_active_seed[16] = {0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U, 0x08U,
-                                        0x09U, 0x0AU, 0x0BU, 0x0CU, 0x0DU, 0x0EU, 0x0FU, 0x10U};
-
-static UdsCallbackResult uds_app_security_seed(void *context, uint8_t level, uint8_t *seed,
-                                               uint16_t *length, uint16_t capacity) {
-    (void)context;
-    (void)level;
-    if ((seed == NULL) || (length == NULL) || (capacity < 16U)) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-    for (uint8_t i = 0U; i < 16U; ++i) {
-        s_sec_active_seed[i] = (uint8_t)(s_sec_active_seed[i] + (uint8_t)(i * 3U + 0x21U));
-    }
-    (void)memcpy(seed, s_sec_active_seed, 16U);
-    *length = 16U;
-    return UDS_RESULT_OK;
-}
-
-static UdsCallbackResult uds_app_security_key(void *context, uint8_t level, const uint8_t *key,
-                                              uint16_t length) {
-    (void)context;
-    (void)level;
-    if ((key == NULL) || (length != 16U)) {
-        return UDS_RESULT_INVALID_KEY;
-    }
-    uint8_t expected_key[16];
-    if (!uds_security_cmac_derive_key(s_sec_master_key, s_sec_active_seed, expected_key)) {
-        return UDS_RESULT_ERROR;
-    }
-    if (!uds_security_cmac_constant_time_equal(key, expected_key)) {
-        return UDS_RESULT_INVALID_KEY;
-    }
-    return UDS_RESULT_OK;
-}
 
 static UdsCallbackResult uds_app_ecu_reset_prepare(void *context, uint8_t subfunction) {
     (void)context;
@@ -97,6 +59,7 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     uds_bootloader_init();
     uds_auth_app_init();
     uds_memory_app_init();
+    uds_security_app_init();
 
     (void)memset(&s_service_backends, 0, sizeof(s_service_backends));
     s_service_backends.authentication = uds_auth_app_get_backend();
@@ -116,8 +79,8 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     config.functional_request_id = UDS_APP_FUNCTIONAL_ID;
     config.uds_callbacks.read_did = uds_did_app_read;
     config.uds_callbacks.write_did = uds_did_app_write;
-    config.uds_callbacks.security_seed = uds_app_security_seed;
-    config.uds_callbacks.security_key = uds_app_security_key;
+    config.uds_callbacks.security_seed = uds_security_app_seed;
+    config.uds_callbacks.security_key = uds_security_app_key;
     config.uds_callbacks.ecu_reset = uds_app_ecu_reset_prepare;
     config.uds_callbacks.ecu_reset_execute = uds_app_ecu_reset_execute;
     config.uds_callbacks.dtc_backend = uds_dtc_app_get_backend();

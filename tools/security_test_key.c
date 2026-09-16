@@ -1,6 +1,7 @@
 /*
  * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
+#include "uds_security_cmac.h"
 #include "uds_security_reference.h"
 
 #include <stdbool.h>
@@ -8,9 +9,14 @@
 #include <stdio.h>
 #include <string.h>
 
+static const uint8_t s_cmac_master_key[16] = {0x2BU, 0x7EU, 0x15U, 0x16U, 0x28U, 0xAEU,
+                                              0xD2U, 0xA6U, 0xABU, 0xF7U, 0x15U, 0x88U,
+                                              0x09U, 0xCFU, 0x4FU, 0x3CU};
+
 static void usage(const char *program) {
-    fprintf(stderr, "Usage: %s <1|5> <8-hex-digit-seed>\n", program);
-    fprintf(stderr, "       seed bytes are parsed left-to-right as seed[0]..seed[3].\n");
+    fprintf(stderr, "Usage: %s <1|2|5> <hex-seed>\n", program);
+    fprintf(stderr, "       Level 1 / 5: 4-byte seed (8 hex digits)\n");
+    fprintf(stderr, "       Level 2    : 16-byte seed (32 hex digits, AES-CMAC128)\n");
     fprintf(stderr, "TEST/REFERENCE ONLY: not production ECU security.\n");
 }
 
@@ -19,11 +25,15 @@ static bool parse_level(const char *text, uint8_t *level) {
         return false;
     }
     if (strcmp(text, "1") == 0) {
-        *level = UDS_SECURITY_REFERENCE_LEVEL_1;
+        *level = 1U;
+        return true;
+    }
+    if (strcmp(text, "2") == 0) {
+        *level = 2U;
         return true;
     }
     if (strcmp(text, "5") == 0) {
-        *level = UDS_SECURITY_REFERENCE_LEVEL_5;
+        *level = 5U;
         return true;
     }
     return false;
@@ -48,7 +58,7 @@ static bool parse_hex_nibble(char value, uint8_t *nibble) {
     return false;
 }
 
-static bool parse_seed(const char *text, uint8_t seed[UDS_SECURITY_REFERENCE_SEED_LENGTH]) {
+static bool parse_seed_bytes(const char *text, uint8_t *seed, uint16_t expected_len) {
     size_t offset = 0U;
     if ((text == NULL) || (seed == NULL)) {
         return false;
@@ -56,10 +66,10 @@ static bool parse_seed(const char *text, uint8_t seed[UDS_SECURITY_REFERENCE_SEE
     if ((strlen(text) >= 2U) && (text[0] == '0') && ((text[1] == 'x') || (text[1] == 'X'))) {
         offset = 2U;
     }
-    if (strlen(text) - offset != (UDS_SECURITY_REFERENCE_SEED_LENGTH * 2U)) {
+    if (strlen(text) - offset != ((size_t)expected_len * 2U)) {
         return false;
     }
-    for (size_t index = 0U; index < UDS_SECURITY_REFERENCE_SEED_LENGTH; ++index) {
+    for (size_t index = 0U; index < (size_t)expected_len; ++index) {
         uint8_t high = 0U;
         uint8_t low = 0U;
         if (!parse_hex_nibble(text[offset + (index * 2U)], &high) ||
@@ -81,19 +91,36 @@ static void print_bytes(const char *label, const uint8_t *data, uint16_t length)
 
 int main(int argc, char **argv) {
     uint8_t level = 0U;
-    uint8_t seed[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U};
-    uint8_t key[UDS_SECURITY_REFERENCE_MAX_KEY_LENGTH] = {0U};
+    uint8_t seed[16] = {0U};
+    uint8_t key[16] = {0U};
+    uint16_t seed_length = 0U;
     uint16_t key_length = 0U;
 
-    if ((argc != 3) || !parse_level(argv[1], &level) || !parse_seed(argv[2], seed) ||
-        !uds_security_reference_calculate_key(level, seed, sizeof(seed), key, sizeof(key),
-                                              &key_length)) {
+    if ((argc != 3) || !parse_level(argv[1], &level)) {
         usage(argv[0]);
         return 2;
     }
 
+    if (level == 2U) {
+        seed_length = 16U;
+        if (!parse_seed_bytes(argv[2], seed, seed_length) ||
+            !uds_security_cmac_derive_key(s_cmac_master_key, seed, key)) {
+            usage(argv[0]);
+            return 2;
+        }
+        key_length = 16U;
+    } else {
+        seed_length = 4U;
+        if (!parse_seed_bytes(argv[2], seed, seed_length) ||
+            !uds_security_reference_calculate_key(level, seed, seed_length, key, sizeof(key),
+                                                  &key_length)) {
+            usage(argv[0]);
+            return 2;
+        }
+    }
+
     printf("level = %u\n", (unsigned int)level);
-    print_bytes("seed = ", seed, (uint16_t)sizeof(seed));
+    print_bytes("seed = ", seed, seed_length);
     print_bytes("key  = ", key, key_length);
     puts("WARNING: TEST/REFERENCE ONLY; do not use as production security.");
     return 0;
