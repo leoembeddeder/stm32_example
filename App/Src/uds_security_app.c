@@ -30,7 +30,8 @@ static uint32_t s_csprng_counter = 0U;
 
 static void csprng_accumulate_entropy(uint32_t sample) {
     s_csprng_counter++;
-    uint8_t sample_bytes[8];
+    uint8_t sample_bytes[16];
+    (void)memset(sample_bytes, 0, sizeof(sample_bytes));
     sample_bytes[0] = (uint8_t)(sample >> 24U);
     sample_bytes[1] = (uint8_t)(sample >> 16U);
     sample_bytes[2] = (uint8_t)(sample >> 8U);
@@ -39,6 +40,7 @@ static void csprng_accumulate_entropy(uint32_t sample) {
     sample_bytes[5] = (uint8_t)(s_csprng_counter >> 16U);
     sample_bytes[6] = (uint8_t)(s_csprng_counter >> 8U);
     sample_bytes[7] = (uint8_t)(s_csprng_counter);
+    sample_bytes[8] = 0x80U;
 
     uint8_t mac[16];
     if (uds_security_cmac_derive_key(s_csprng_pool, sample_bytes, mac)) {
