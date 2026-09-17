@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "can_transport.h"
 #include "uds_app.h"
+#include "uds_dtc_app.h"
 #include "uds_platform.h"
 /* USER CODE END Includes */
 
@@ -57,7 +58,7 @@ static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void App_DiagnosticTask(uint32_t now_ms);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -70,6 +71,46 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &header, data) == HAL_OK) {
         uds_app_rx_from_isr(header.StdId, data, (uint8_t)header.DLC);
     }
+}
+
+/**
+ * @brief  Application diagnostic supervision task (AUTOSAR Dem event reporting).
+ * @param  now_ms Current monotonic system timestamp in milliseconds.
+ *
+ * @note   Demonstrates how application monitors, sensor drivers, and peripheral
+ *         supervisory routines report pass/fail health events into the UDS DTC
+ *         debouncing engine via uds_dtc_app_report_event().
+ *
+ * Requirements / Conditions to call uds_dtc_app_report_event(dtc, failed):
+ *  1. Stack Initialization: uds_app_init() must be called first during startup.
+ *  2. DTC Registration: The target DTC must exist in the supported DTC table
+ *     (e.g., 0xD00617UL for Battery Low, 0xD00618UL for CAN Bus-Off).
+ *  3. ControlDTCSetting (0x85): Respects tester disable requests (updates are
+ *     suppressed during flashing/calibration when 0x85 02 is active).
+ *  4. Debouncing Dynamics: Counter shifts by +16 when failed=true, -16 when
+ *     failed=false. Upon reaching +127 (approx 8 consecutive failure cycles),
+ *     the fault qualifies into CONFIRMED state and is persisted to NVM.
+ */
+static void App_DiagnosticTask(uint32_t now_ms) {
+    static uint32_t s_last_diag_tick = 0U;
+
+    /* Execute periodic diagnostic supervision cycle every 100 ms */
+    if ((now_ms - s_last_diag_tick) < 100U) {
+        return;
+    }
+    s_last_diag_tick = now_ms;
+
+    /* Example 1: CAN Bus-Off & Transmission Error Monitoring */
+    bool can_busoff = uds_can_transport_tx_error(&uds_transport);
+    (void)uds_dtc_app_report_event(0xD00618UL, can_busoff); /* C100618 ASW_DTC_CanBusOff */
+
+    /* Example 2: Monitored Battery Supply Voltage Supervision
+     * In production, read physical voltage via ADC (e.g., BSP_GetBatteryVoltage_mV()).
+     * Here simulated as 12.0V nominal (healthy: failed = false).
+     */
+    uint32_t simulated_vbatt_mv = 12000U;
+    bool vbatt_low = (simulated_vbatt_mv < 9000U);
+    (void)uds_dtc_app_report_event(0xD00617UL, vbatt_low); /* C100617 ASW_DTC_BatteryVoltLow */
 }
 /* USER CODE END 0 */
 
@@ -135,7 +176,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    uds_app_process(uds_platform_now_ms());
+    uint32_t now_ms = uds_platform_now_ms();
+    uds_app_process(now_ms);
+    App_DiagnosticTask(now_ms);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
