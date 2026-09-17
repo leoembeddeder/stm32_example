@@ -48,13 +48,17 @@ typedef struct {
     uint8_t extended_length;
 } UdsDtcRomDef;
 
-/* Compact runtime status stored in SRAM (5 bytes per DTC) */
+/* Compact runtime status stored in SRAM */
 typedef struct {
     uint8_t status_byte;        /* ISO 14229-1 status mask bitfield */
     int8_t fault_counter;       /* Fault detection counter (-128 to 127) */
     uint8_t occurrence_counter; /* Fault occurrence counter */
     uint8_t aging_counter;      /* Aging counter */
     bool active;
+    bool has_snapshot;
+    uint8_t snapshot_record_num;
+    uint8_t snapshot_length;
+    uint8_t snapshot_data[UDS_DTC_APP_SNAPSHOT_SIZE];
 } UdsDtcRamStatus;
 
 /* Dynamic record for runtime-registered DTCs not present in ROM */
@@ -79,6 +83,8 @@ typedef struct {
     const uint8_t *extended_data;
     uint8_t extended_length;
     bool active;
+    bool has_snapshot;
+    uint8_t snapshot_record_num;
 } UdsDtcAppRecord;
 
 typedef struct {
@@ -87,12 +93,25 @@ typedef struct {
     UdsDtcRamStatus static_status[UDS_DTC_STATIC_COUNT];
     UdsDtcDynamicRecord dynamic_records[UDS_DTC_DYNAMIC_MAX];
     uint8_t dynamic_count;
+    bool dtc_setting_enabled;
     UdsParamStore *nvm_store;
 } UdsDtcAppStorage;
+
+#define UDS_DTC_NV_MAX_SNAPSHOTS 8U
+
+typedef struct {
+    uint32_t dtc_number;
+    uint8_t record_num;
+    uint8_t length;
+    uint8_t _pad;
+    uint8_t data[UDS_DTC_APP_SNAPSHOT_SIZE];
+} UdsDtcNvSnapshot;
 
 /* Layout for NVM persistence across power cycles / resets */
 typedef struct {
     uint8_t record_count;
+    uint8_t snapshot_count;
+    uint8_t _pad[2];
     struct {
         uint32_t dtc_number;
         uint8_t status_byte;
@@ -103,6 +122,7 @@ typedef struct {
         uint8_t aging_counter;
         bool active;
     } records[UDS_DTC_APP_MAX_RECORDS];
+    UdsDtcNvSnapshot snapshots[UDS_DTC_NV_MAX_SNAPSHOTS];
 } UdsDtcNvBlock;
 
 /* ISO 14229-1 Annex D DTC Status Mask Bitfield Definitions */
@@ -125,6 +145,15 @@ UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc);
 bool uds_dtc_app_set_fault(uint32_t dtc, uint8_t status, uint8_t severity, int8_t counter);
 bool uds_dtc_app_clear_fault(uint32_t dtc);
 bool uds_dtc_app_report_event(uint32_t dtc, bool failed);
+
+/* ControlDTCSetting (0x85) Service Callbacks & State */
+UdsCallbackResult uds_dtc_app_control_setting(void *context, uint8_t subfunction);
+bool uds_dtc_app_is_setting_enabled(void);
+void uds_dtc_app_set_setting_enabled(bool enabled);
+
+/* Snapshot / Freeze Frame Buffer API */
+bool uds_dtc_app_set_snapshot(uint32_t dtc, uint8_t record_num, const uint8_t *data,
+                              uint8_t length);
 
 /* NVM / Flash Wear-Leveling Hook */
 void uds_dtc_app_attach_nvm(UdsParamStore *store);

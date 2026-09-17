@@ -38,6 +38,12 @@ __attribute__((weak)) UdsCallbackResult uds_dtc_app_clear(void *context, uint32_
     (void)group_of_dtc;
     return UDS_RESULT_OUT_OF_RANGE;
 }
+__attribute__((weak)) UdsCallbackResult uds_dtc_app_control_setting(void *context,
+                                                                    uint8_t subfunction) {
+    (void)context;
+    (void)subfunction;
+    return UDS_RESULT_OK;
+}
 
 __attribute__((weak)) void uds_did_app_init(void) {}
 __attribute__((weak)) UdsCallbackResult uds_did_app_read(void *context, uint16_t did, uint8_t *data,
@@ -229,6 +235,8 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
         config.uds_callbacks.dtc_backend = uds_dtc_app_get_backend();
     if (config.uds_callbacks.clear_dtc == NULL)
         config.uds_callbacks.clear_dtc = uds_dtc_app_clear;
+    if (config.uds_callbacks.control_dtc_setting == NULL)
+        config.uds_callbacks.control_dtc_setting = uds_dtc_app_control_setting;
     if (config.uds_callbacks.request_download == NULL)
         config.uds_callbacks.request_download = uds_bootloader_request_download;
     if (config.uds_callbacks.transfer_data == NULL)

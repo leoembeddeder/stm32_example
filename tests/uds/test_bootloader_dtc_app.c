@@ -1,9 +1,60 @@
 #include "uds_bootloader.h"
 #include "uds_dtc_app.h"
 #include "uds_iso_tp/uds.h"
+#include "uds_iso_tp/uds_wear_leveling.h"
 
 #include <assert.h>
 #include <string.h>
+
+#define MOCK_FLASH_SECTOR_SIZE 2048U
+#define MOCK_FLASH_SECTOR_COUNT 4U
+static uint8_t s_mock_flash_storage[MOCK_FLASH_SECTOR_SIZE * MOCK_FLASH_SECTOR_COUNT];
+
+static int mock_flash_erase(uint32_t addr) {
+    uint32_t offset = (addr >= 0x08000000U) ? (addr - 0x08000000U) : addr;
+    uint32_t sec = offset / MOCK_FLASH_SECTOR_SIZE;
+    if (sec >= MOCK_FLASH_SECTOR_COUNT) {
+        return UDS_PARAM_ERR;
+    }
+    (void)memset(&s_mock_flash_storage[sec * MOCK_FLASH_SECTOR_SIZE], 0xFF, MOCK_FLASH_SECTOR_SIZE);
+    return UDS_PARAM_OK;
+}
+
+static int mock_flash_read(uint32_t addr, void *buf, size_t len) {
+    if (buf == NULL) {
+        return UDS_PARAM_INVALID_PARAM;
+    }
+    uint32_t offset = (addr >= 0x08000000U) ? (addr - 0x08000000U) : addr;
+    if ((offset + len) > sizeof(s_mock_flash_storage)) {
+        return UDS_PARAM_ERR;
+    }
+    (void)memcpy(buf, &s_mock_flash_storage[offset], len);
+    return UDS_PARAM_OK;
+}
+
+static int mock_flash_write(uint32_t addr, const void *buf, size_t len) {
+    if (buf == NULL) {
+        return UDS_PARAM_INVALID_PARAM;
+    }
+    uint32_t offset = (addr >= 0x08000000U) ? (addr - 0x08000000U) : addr;
+    if ((offset + len) > sizeof(s_mock_flash_storage)) {
+        return UDS_PARAM_ERR;
+    }
+    (void)memcpy(&s_mock_flash_storage[offset], buf, len);
+    return UDS_PARAM_OK;
+}
+
+static uint32_t mock_flash_sector_size(uint32_t addr) {
+    (void)addr;
+    return MOCK_FLASH_SECTOR_SIZE;
+}
+
+static const UdsFlashPort s_mock_flash_port = {
+    .erase = mock_flash_erase,
+    .read = mock_flash_read,
+    .write = mock_flash_write,
+    .sector_size = mock_flash_sector_size,
+};
 
 static void test_dtc_app_all_subfunctions(void) {
     uds_dtc_app_init();
@@ -267,8 +318,146 @@ static void test_bootloader_flow(void) {
     assert(!uds_bootloader_is_application_valid(0x08300000UL)); /* Beyond Flash size */
 }
 
+static void test_iso14229_19_04_conformance(void) {
+    uds_dtc_app_init();
+    const UdsDtcBackend *backend = uds_dtc_app_get_backend();
+    uint8_t response[256];
+    uint16_t resp_len = 0U;
+
+    /* 1. Issue #51 Conformance: 19 04 on supported DTCs that are NOT faulted (status 0x50 / cleared) */
+    /* Must return positive response with 5 bytes [0x04, DTC_H, DTC_M, DTC_L, status] */
+    /* MUST NOT return NRC 0x31 (UDS_RESULT_OUT_OF_RANGE) */
+    uint8_t req_16[] = {0x19U, 0x04U, 0xD0U, 0x06U, 0x16U, 0x00U};
+    assert(backend->report(NULL, 0x04U, req_16, sizeof(req_16), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 5U);
+    assert(response[0] == 0x04U);
+    assert(response[1] == 0xD0U && response[2] == 0x06U && response[3] == 0x16U);
+    assert(response[4] == UDS_DTC_STATUS_CLEARED);
+
+    uint8_t req_14[] = {0x19U, 0x04U, 0xF0U, 0x06U, 0x14U, 0x00U};
+    assert(backend->report(NULL, 0x04U, req_14, sizeof(req_14), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 5U);
+    assert(response[0] == 0x04U);
+    assert(response[1] == 0xF0U && response[2] == 0x06U && response[3] == 0x14U);
+
+    uint8_t req_15[] = {0x19U, 0x04U, 0xF0U, 0x06U, 0x15U, 0x00U};
+    assert(backend->report(NULL, 0x04U, req_15, sizeof(req_15), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 5U);
+
+    /* 2. 19 04 on an unsupported DTC -> must return UDS_RESULT_OUT_OF_RANGE (NRC 0x31) */
+    uint8_t req_unsupported[] = {0x19U, 0x04U, 0xFFU, 0x00U, 0x11U, 0x00U};
+    assert(backend->report(NULL, 0x04U, req_unsupported, sizeof(req_unsupported), response,
+                           &resp_len, sizeof(response)) == UDS_RESULT_OUT_OF_RANGE);
+
+    /* 3. 19 06 on supported unfaulted DTC -> positive response 5 bytes, no NRC 0x31 */
+    uint8_t req_06_unfaulted[] = {0x19U, 0x06U, 0xD0U, 0x06U, 0x16U, 0x01U};
+    assert(backend->report(NULL, 0x06U, req_06_unfaulted, sizeof(req_06_unfaulted), response,
+                           &resp_len, sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 5U);
+
+    /* 4. 19 09 on supported unfaulted DTC -> returns severity & functional unit */
+    uint8_t req_09_unfaulted[] = {0x19U, 0x09U, 0xD0U, 0x06U, 0x16U};
+    assert(backend->report(NULL, 0x09U, req_09_unfaulted, sizeof(req_09_unfaulted), response,
+                           &resp_len, sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len >= 6U);
+
+    /* 5. Set fault on 0xD00616 and verify snapshot reporting with record 0x00 */
+    assert(uds_dtc_app_set_fault(0xD00616UL, 0x08U, 0x80U, 10));
+    assert(backend->report(NULL, 0x04U, req_16, sizeof(req_16), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len > 5U);
+    assert(response[0] == 0x04U);
+    assert(response[5] == 0x00U); /* Echoes record 0x00 */
+}
+
+static void test_control_dtc_setting_service(void) {
+    uds_dtc_app_init();
+    assert(uds_dtc_app_is_setting_enabled());
+
+    /* 1. Subfunction 0x02: off */
+    assert(uds_dtc_app_control_setting(NULL, 0x02U) == UDS_RESULT_OK);
+    assert(!uds_dtc_app_is_setting_enabled());
+
+    /* While disabled, set_fault should not update DTC state */
+    assert(uds_dtc_app_set_fault(0xD00617UL, 0x01U, 0x80U, 50));
+    const UdsDtcBackend *backend = uds_dtc_app_get_backend();
+    uint8_t response[256];
+    uint16_t resp_len = 0U;
+    uint8_t req_04[] = {0x19U, 0x04U, 0xD0U, 0x06U, 0x17U, 0x00U};
+    assert(backend->report(NULL, 0x04U, req_04, sizeof(req_04), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    /* Should remain 5 bytes (no snapshot) because updates were suppressed */
+    assert(resp_len == 5U);
+
+    /* While disabled, report_event should not update DTC state */
+    for (int i = 0; i < 10; ++i) {
+        assert(uds_dtc_app_report_event(0xD00617UL, true));
+    }
+    assert(backend->report(NULL, 0x04U, req_04, sizeof(req_04), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 5U);
+
+    /* 2. Subfunction 0x01: on */
+    assert(uds_dtc_app_control_setting(NULL, 0x01U) == UDS_RESULT_OK);
+    assert(uds_dtc_app_is_setting_enabled());
+
+    /* Now set_fault works */
+    assert(uds_dtc_app_set_fault(0xD00617UL, 0x09U, 0x80U, 50));
+    assert(backend->report(NULL, 0x04U, req_04, sizeof(req_04), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len > 5U); /* Snapshot present */
+
+    /* 3. Unsupported subfunction */
+    assert(uds_dtc_app_control_setting(NULL, 0x03U) == UDS_RESULT_SUBFUNCTION_NOT_SUPPORTED);
+}
+
+static void test_dtc_wear_leveling_nvm(void) {
+    (void)memset(s_mock_flash_storage, 0xFF, sizeof(s_mock_flash_storage));
+
+    UdsParamStore store;
+    assert(uds_param_init(&store, &s_mock_flash_port, 0x08000000U, MOCK_FLASH_SECTOR_COUNT,
+                          (uint16_t)sizeof(UdsDtcNvBlock)) == UDS_PARAM_OK);
+
+    uds_dtc_app_init();
+    uds_dtc_app_attach_nvm(&store);
+
+    /* Fault a DTC and attach custom snapshot payload */
+    uint8_t snap[4] = {0x11U, 0x22U, 0x33U, 0x44U};
+    assert(uds_dtc_app_set_fault(0xD00618UL, 0x29U, 0x80U, 120));
+    assert(uds_dtc_app_set_snapshot(0xD00618UL, 0x01U, snap, sizeof(snap)));
+    assert(uds_dtc_app_save_to_nvm());
+
+    /* Simulate power cycle / reboot: wipe RAM */
+    uds_dtc_app_init();
+
+    /* Re-attach store: auto-loads from flash */
+    uds_dtc_app_attach_nvm(&store);
+
+    /* Verify 0xD00618 is restored with fault status and snapshot */
+    const UdsDtcBackend *backend = uds_dtc_app_get_backend();
+    uint8_t response[256];
+    uint16_t resp_len = 0U;
+    uint8_t req_04[] = {0x19U, 0x04U, 0xD0U, 0x06U, 0x18U, 0x01U};
+    assert(backend->report(NULL, 0x04U, req_04, sizeof(req_04), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len > 5U);
+    assert(response[0] == 0x04U);
+    assert(response[1] == 0xD0U && response[2] == 0x06U && response[3] == 0x18U);
+    assert(response[4] == 0x29U); /* Restored status */
+    assert(response[5] == 0x01U); /* Snapshot record 1 */
+    /* Check snapshot payload bytes */
+    assert(response[9] == 0x11U && response[10] == 0x22U && response[11] == 0x33U &&
+           response[12] == 0x44U);
+}
+
 int main(void) {
     test_dtc_app_all_subfunctions();
+    test_iso14229_19_04_conformance();
+    test_control_dtc_setting_service();
+    test_dtc_wear_leveling_nvm();
     test_bootloader_flow();
     return 0;
 }

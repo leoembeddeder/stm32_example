@@ -88,6 +88,7 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     config.uds_callbacks.ecu_reset_execute = uds_app_ecu_reset_execute;
     config.uds_callbacks.dtc_backend = uds_dtc_app_get_backend();
     config.uds_callbacks.clear_dtc = uds_dtc_app_clear;
+    config.uds_callbacks.control_dtc_setting = uds_dtc_app_control_setting;
     config.uds_callbacks.request_download = uds_bootloader_request_download;
     config.uds_callbacks.transfer_data = uds_bootloader_transfer_data;
     config.uds_callbacks.request_transfer_exit = uds_bootloader_transfer_exit;
