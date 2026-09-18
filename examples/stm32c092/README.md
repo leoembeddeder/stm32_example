@@ -195,3 +195,78 @@ The reset sequence uses a simple application-owned pending flag:
 The UDS service and CAN ISR never execute the reset. `HAL_FDCAN_AddMessageToTxFifoQ()` remains unchanged; the application callback only arms the pending reset, and `uds_c092_platform_reset_poll()` owns the final 50 ms handoff before `NVIC_SystemReset()`. The 50 ms handoff is not the measured reset-to-diagnostic-ready interval. After the positive ECUReset response has completed, the endpoint ignores diagnostic requests until the MCU has actually rebooted; the tester must then wait for `DIAGNOSTIC_READY` before sending the next request.
 
 The maintained adapter accepts only the configured standard physical request ID and optional functional request ID at the application handoff. The generated FDCAN filter should be narrower than the reporter’s broad range filter, normally accepting the configured `0x7E0` physical request and `0x7DF` functional request only when functional addressing is intentionally enabled. Standard data frames are required; unrelated IDs, extended IDs, and remote frames should be rejected by the generated filter/global-filter configuration.
+
+## Hardware Abstraction & Cross-Platform Portability
+
+The core ISO-TP transport and UDS protocol stack in `library/` is strictly freestanding C99 with **zero** hardware or vendor HAL dependencies. All CAN controller interactions occur exclusively through four function pointers defined in `IsoTpConfig` / `UdsIsoTpEndpointConfig`:
+- `send_frame(context, frame)`: queues a CAN/CAN-FD frame for transmission.
+- `tx_complete(context)`: queries whether the previous frame has physically left the bus.
+- `tx_error(context)`: queries whether transmission was aborted or timed out.
+- `clock_ms(context)`: returns a monotonic millisecond timestamp.
+
+### Why `HAL_FDCAN_GetTxEvent()` is used on STM32 FDCAN (Bosch M_CAN IP)
+Unlike classic CAN peripherals where transmission status bits linger in individual transmit mailboxes, the Bosch M_CAN IP (implemented in STM32G0, STM32G4, STM32C092, STM32H7, and other modern MCUs) decouples the TX FIFO from transmission completion records. When a frame is successfully transmitted on the bus, the hardware pops the frame from the TX FIFO and pushes an entry with the associated `MessageMarker` into the dedicated hardware **TX Event FIFO** (`TXEFS` register).
+
+The ST HAL function `HAL_FDCAN_GetTxEvent()` reads entries from this hardware FIFO. Polling or draining this FIFO in `drain_tx_events()` ensures:
+1. Matching message markers are checked to prevent race conditions across multiple transmitters.
+2. The hardware TX Event FIFO does not overflow (`FDCAN_IT_TX_EVT_FIFO_FULL`).
+3. Confirmation is tied directly to physical bus acknowledgement.
+
+### Porting to Other Microcontroller Families
+
+When porting to other microcontroller architectures, the hardware adapter changes, but the core library remains identical:
+
+#### 1. NXP S32K / i.MX RT (FlexCAN)
+FlexCAN organizes transmission into Message Buffers (MBs). Completion is tracked via the IFLAG register:
+```c
+/* NXP FlexCAN TX completion adapter example */
+bool flexcan_adapter_send(void *context, const IsoTpCanFrame *frame) {
+    FlexCanContext *ctx = (FlexCanContext *)context;
+    flexcan_frame_t tx_frame;
+    /* Map frame ID, DLC, and payload */
+    ...
+    status_t status = FLEXCAN_TransferSendBlocking(ctx->base, ctx->tx_mb_idx, &tx_frame);
+    if (status == kStatus_Success) {
+        ctx->tx_pending = true;
+        return true;
+    }
+    return false;
+}
+
+bool flexcan_adapter_tx_complete(void *context) {
+    FlexCanContext *ctx = (FlexCanContext *)context;
+    if (ctx->tx_pending && (FLEXCAN_GetMbStatusFlags(ctx->base, 1U << ctx->tx_mb_idx) != 0U)) {
+        FLEXCAN_ClearMbStatusFlags(ctx->base, 1U << ctx->tx_mb_idx);
+        ctx->tx_pending = false;
+        return true;
+    }
+    return false;
+}
+```
+
+#### 2. Infineon AURIX TC3xx / TC2xx (MultiCAN+)
+AURIX MultiCAN+ uses Message Objects (MO). Completion is queried via transmission request status:
+```c
+/* Infineon MultiCAN+ TX completion adapter example */
+bool multican_adapter_send(void *context, const IsoTpCanFrame *frame) {
+    MultiCanContext *ctx = (MultiCanContext *)context;
+    IfxMultican_Message msg;
+    ...
+    IfxMultican_Status status = IfxMultican_Can_MsgObj_sendMessage(&ctx->tx_msg_obj, &msg);
+    if (status == IfxMultican_Status_ok) {
+        ctx->tx_pending = true;
+        return true;
+    }
+    return false;
+}
+
+bool multican_adapter_tx_complete(void *context) {
+    MultiCanContext *ctx = (MultiCanContext *)context;
+    if (ctx->tx_pending && !IfxMultican_Can_MsgObj_isTxPending(&ctx->tx_msg_obj)) {
+        ctx->tx_pending = false;
+        return true;
+    }
+    return false;
+}
+```
+

@@ -5,7 +5,10 @@
 #include "uds_bootloader.h"
 #include "uds_did_app.h"
 #include "uds_dtc_app.h"
+#include "uds_io_control_app.h"
+#include "uds_link_control_app.h"
 #include "uds_memory_app.h"
+#include "uds_roe_app.h"
 #include "uds_security_app.h"
 #include "uds_iso_tp/endpoint.h"
 #include "uds_iso_tp/uds.h"
@@ -62,10 +65,15 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     uds_auth_app_init();
     uds_memory_app_init();
     uds_security_app_init();
+    uds_io_control_app_init();
+    uds_link_control_app_init();
+    uds_roe_app_init();
 
     (void)memset(&s_service_backends, 0, sizeof(s_service_backends));
     s_service_backends.authentication = uds_auth_app_get_backend();
     s_service_backends.memory = uds_memory_app_get_backend();
+    s_service_backends.link_control = uds_link_control_app_get_backend();
+    s_service_backends.periodic_event = uds_roe_app_get_backend();
 
     UdsIsoTpEndpointConfig config = {0};
     isotp_config_classic_can(&config.isotp_config);
@@ -89,6 +97,7 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     config.uds_callbacks.dtc_backend = uds_dtc_app_get_backend();
     config.uds_callbacks.clear_dtc = uds_dtc_app_clear;
     config.uds_callbacks.control_dtc_setting = uds_dtc_app_control_setting;
+    config.uds_callbacks.io_control = uds_io_control_app_handler;
     config.uds_callbacks.request_download = uds_bootloader_request_download;
     config.uds_callbacks.transfer_data = uds_bootloader_transfer_data;
     config.uds_callbacks.request_transfer_exit = uds_bootloader_transfer_exit;

@@ -130,6 +130,18 @@ bool uds_c092_fdcan_tx_error(void *context) {
 }
 
 /*
+ * Hardware Abstraction Note (Bosch M_CAN IP / STM32 FDCAN):
+ * Unlike legacy CAN controllers (such as STM32 bxCAN with HAL_CAN_IsTxMessagePending)
+ * or NXP FlexCAN (which use mailbox transmit status bits), Bosch M_CAN IP moves
+ * completed transmission markers from the TX FIFO directly into the hardware
+ * TX Event FIFO (TXEFS). The standard mechanism provided by ST HAL to retrieve
+ * completed transmission events and their message markers is HAL_FDCAN_GetTxEvent().
+ *
+ * For non-FDCAN microcontrollers (such as NXP FlexCAN, Infineon MultiCAN+, or
+ * STM32 bxCAN), the hardware adapter provides its own tx_complete/tx_error
+ * callbacks based on mailbox status polling or transmission interrupts; the
+ * core ISO-TP and UDS engine in library/ has zero dependency on this function.
+ *
  * The ISR and mainline fallback must not drain the HAL FIFO concurrently. The
  * application integration serializes them by polling with the TX-event IRQ
  * masked; a direct caller must provide the equivalent critical section.

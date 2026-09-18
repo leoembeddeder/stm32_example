@@ -130,6 +130,21 @@ if(UDS_ISO_TP_BUILD_TESTS)
     add_test(NAME uds_iso_tp_services_contract
              COMMAND uds_iso_tp_services_test)
 
+    add_executable(uds_iso_tp_services_extended_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_services_extended.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_io_control_app.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_link_control_app.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_roe_app.c)
+    target_include_directories(uds_iso_tp_services_extended_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
+    target_link_libraries(uds_iso_tp_services_extended_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_services_extended_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_services_extended_contract
+             COMMAND uds_iso_tp_services_extended_test)
+
     add_executable(uds_iso_tp_bootloader_dtc_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_bootloader_dtc_app.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_dtc_app.c
