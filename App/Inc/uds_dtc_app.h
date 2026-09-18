@@ -25,9 +25,40 @@
 #define UDS_DTC_DID_LAST_ODOMETER 0xDF04U      /* Last odometer of malfunction */
 #define UDS_DTC_DID_TIMESTAMP 0xDD00U          /* Malfunction timestamp (sec,min,hr,m,d,y) */
 
-/* Standard Extended Data Record Numbers */
-#define UDS_DTC_EXT_DATA_OCCURRENCES 0x01U   /* Fault occurrence counter */
-#define UDS_DTC_EXT_DATA_AGING_COUNTER 0x02U /* Consecutive unfailed cycles */
+/* Extended Data Record Numbers (ISO 14229-1 & AUTOSAR Dem) */
+#define UDS_DTC_EXT_DATA_OCCURRENCES 0x01U     /* Fault occurrence counter */
+#define UDS_DTC_EXT_DATA_PENDING_COUNTER 0x02U /* Fault pending counter */
+#define UDS_DTC_EXT_DATA_AGING_COUNTER 0x03U   /* Aging counter (consecutive unfailed cycles) */
+#define UDS_DTC_EXT_DATA_AGED_COUNTER 0x04U    /* Aged / unlearned counter */
+#define UDS_DTC_EXT_DATA_ALL 0xFFU             /* All extended data records */
+
+/* OBD Extended Data Format */
+typedef struct {
+    uint8_t fault_occur_counter;
+    uint8_t fault_pending_counter;
+    uint8_t aged_counter;
+    uint8_t ageing_counter;
+} OBD_Extended_Data_Format;
+
+/* Snapshot Time & Date Structure Definition */
+typedef struct {
+    uint8_t second;
+    uint8_t minute;
+    uint8_t hour;
+    uint8_t day;
+    uint8_t month;
+    uint8_t year;
+} OBD_Global_Snapshot_DataTime_Format;
+
+/* DTC Global Snapshot Data Structure Definition */
+typedef struct {
+    uint8_t voltage; /* Battery supply voltage in 0.1V units (e.g. 120 = 12.0V) */
+    uint8_t
+        global_power_mode; /* Global power mode (e.g. 0x01=OFF, 0x02=ACC, 0x03=ON, 0x04=START) */
+    OBD_Global_Snapshot_DataTime_Format st_global_snapshot_datatime;
+} OBD_Global_Snapshot_Format;
+
+#define UDS_DTC_DID_GLOBAL_SNAPSHOT 0x0100U
 
 #define UDS_DTC_STATIC_COUNT 69U
 #define UDS_DTC_DYNAMIC_MAX (UDS_DTC_APP_MAX_RECORDS - UDS_DTC_STATIC_COUNT)
@@ -53,12 +84,16 @@ typedef struct {
     uint8_t status_byte;        /* ISO 14229-1 status mask bitfield */
     int8_t fault_counter;       /* Fault detection counter (-128 to 127) */
     uint8_t occurrence_counter; /* Fault occurrence counter */
+    uint8_t pending_counter;    /* Fault pending counter */
     uint8_t aging_counter;      /* Aging counter */
+    uint8_t aged_counter;       /* Aged counter */
     bool active;
     bool has_snapshot;
     uint8_t snapshot_record_num;
     uint8_t snapshot_length;
     uint8_t snapshot_data[UDS_DTC_APP_SNAPSHOT_SIZE];
+    uint8_t extended_data[UDS_DTC_APP_EXTENDED_SIZE];
+    uint8_t extended_length;
 } UdsDtcRamStatus;
 
 /* Dynamic record for runtime-registered DTCs not present in ROM */
@@ -77,7 +112,9 @@ typedef struct {
     uint8_t functional_unit;    /* Functional unit */
     int8_t fault_counter;       /* Fault detection counter (-128 to 127) */
     uint8_t occurrence_counter; /* Fault occurrence counter */
+    uint8_t pending_counter;    /* Fault pending counter */
     uint8_t aging_counter;      /* Aging counter */
+    uint8_t aged_counter;       /* Aged counter */
     const uint8_t *snapshot_data;
     uint8_t snapshot_length;
     const uint8_t *extended_data;
@@ -119,7 +156,9 @@ typedef struct {
         uint8_t functional_unit;
         int8_t fault_counter;
         uint8_t occurrence_counter;
+        uint8_t pending_counter;
         uint8_t aging_counter;
+        uint8_t aged_counter;
         bool active;
     } records[UDS_DTC_APP_MAX_RECORDS];
     UdsDtcNvSnapshot snapshots[UDS_DTC_NV_MAX_SNAPSHOTS];
@@ -154,6 +193,10 @@ void uds_dtc_app_set_setting_enabled(bool enabled);
 /* Snapshot / Freeze Frame Buffer API */
 bool uds_dtc_app_set_snapshot(uint32_t dtc, uint8_t record_num, const uint8_t *data,
                               uint8_t length);
+bool uds_dtc_app_set_global_snapshot(uint32_t dtc, const OBD_Global_Snapshot_Format *snapshot);
+bool uds_dtc_app_get_global_snapshot(uint32_t dtc, OBD_Global_Snapshot_Format *snapshot);
+bool uds_dtc_app_set_extended_data(uint32_t dtc, const OBD_Extended_Data_Format *ext_data);
+bool uds_dtc_app_get_extended_data(uint32_t dtc, OBD_Extended_Data_Format *ext_data);
 
 /* NVM / Flash Wear-Leveling Hook */
 void uds_dtc_app_attach_nvm(UdsParamStore *store);

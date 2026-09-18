@@ -453,11 +453,166 @@ static void test_dtc_wear_leveling_nvm(void) {
            response[12] == 0x44U);
 }
 
+static void test_extended_data_and_snapshot_structures(void) {
+    uds_dtc_app_init();
+    const UdsDtcBackend *backend = uds_dtc_app_get_backend();
+    assert(backend != NULL);
+    uint8_t response[256];
+    uint16_t resp_len = 0U;
+
+    /* 1. Test Issue #58: Global Snapshot Format & Getters/Setters */
+    OBD_Global_Snapshot_Format snap_in = {
+        .voltage = 135U,            /* 13.5 V */
+        .global_power_mode = 0x02U, /* ACC */
+        .st_global_snapshot_datatime =
+            {
+                .second = 30U,
+                .minute = 45U,
+                .hour = 14U,
+                .day = 15U,
+                .month = 8U,
+                .year = 24U,
+            },
+    };
+    assert(uds_dtc_app_set_global_snapshot(0xD00617UL, &snap_in));
+
+    OBD_Global_Snapshot_Format snap_out;
+    (void)memset(&snap_out, 0, sizeof(snap_out));
+    assert(uds_dtc_app_get_global_snapshot(0xD00617UL, &snap_out));
+    assert(snap_out.voltage == 135U);
+    assert(snap_out.global_power_mode == 0x02U);
+    assert(snap_out.st_global_snapshot_datatime.second == 30U);
+    assert(snap_out.st_global_snapshot_datatime.minute == 45U);
+    assert(snap_out.st_global_snapshot_datatime.hour == 14U);
+    assert(snap_out.st_global_snapshot_datatime.day == 15U);
+    assert(snap_out.st_global_snapshot_datatime.month == 8U);
+    assert(snap_out.st_global_snapshot_datatime.year == 24U);
+
+    /* 2. Test Issue #58: Extended Data Format & Getters/Setters */
+    OBD_Extended_Data_Format ext_in = {
+        .fault_occur_counter = 7U,
+        .fault_pending_counter = 3U,
+        .aged_counter = 1U,
+        .ageing_counter = 12U,
+    };
+    assert(uds_dtc_app_set_extended_data(0xD00617UL, &ext_in));
+
+    OBD_Extended_Data_Format ext_out;
+    (void)memset(&ext_out, 0, sizeof(ext_out));
+    assert(uds_dtc_app_get_extended_data(0xD00617UL, &ext_out));
+    assert(ext_out.fault_occur_counter == 7U);
+    assert(ext_out.fault_pending_counter == 3U);
+    assert(ext_out.aged_counter == 1U);
+    assert(ext_out.ageing_counter == 12U);
+
+    /* 3. Test Issue #55: 19 04 and 19 06 return distinct responses for active DTC */
+    /* Activate fault on 0xD00617 so it has records */
+    assert(uds_dtc_app_set_fault(0xD00617UL, 0x2FU, 0x80U, 50));
+    /* Re-apply custom snapshot and extended data */
+    assert(uds_dtc_app_set_global_snapshot(0xD00617UL, &snap_in));
+    assert(uds_dtc_app_set_extended_data(0xD00617UL, &ext_in));
+
+    /* Query 19 04: Snapshot record 0x01 */
+    uint8_t req_04[] = {0x19U, 0x04U, 0xD0U, 0x06U, 0x17U, 0x01U};
+    assert(backend->report(NULL, 0x04U, req_04, sizeof(req_04), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    /* Response: 1 (subfunction) + 3 (DTC) + 1 (status) + 1 (record 0x01) + 1 (1 DID) + 2 (DID 0x0100) + 8 (data) = 17 bytes */
+    assert(resp_len == 17U);
+    assert(response[0] == 0x04U);
+    assert(response[1] == 0xD0U && response[2] == 0x06U && response[3] == 0x17U);
+    assert(response[5] == 0x01U);                         /* Snapshot record 1 */
+    assert(response[6] == 0x01U);                         /* 1 DID */
+    assert(response[7] == 0x01U && response[8] == 0x00U); /* DID 0x0100 */
+    assert(response[9] == 135U);                          /* Voltage 13.5V */
+    assert(response[10] == 0x02U);                        /* Power mode ACC */
+    assert(response[11] == 30U && response[12] == 45U && response[13] == 14U);
+
+    /* Query 19 06: Record 0x01 (occurrences) */
+    uint8_t req_06_r1[] = {0x19U, 0x06U, 0xD0U, 0x06U, 0x17U, 0x01U};
+    assert(backend->report(NULL, 0x06U, req_06_r1, sizeof(req_06_r1), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    /* Response: 1 (subfunction) + 3 (DTC) + 1 (status) + 1 (record 0x01) + 1 (counter) = 7 bytes */
+    assert(resp_len == 7U);
+    assert(response[0] == 0x06U);
+    assert(response[1] == 0xD0U && response[2] == 0x06U && response[3] == 0x17U);
+    assert(response[5] == 0x01U); /* Record 0x01 */
+    assert(response[6] == 7U);    /* Occurrence counter = 7 */
+
+    /* Query 19 06: Record 0x02 (pending counter) */
+    uint8_t req_06_r2[] = {0x19U, 0x06U, 0xD0U, 0x06U, 0x17U, 0x02U};
+    assert(backend->report(NULL, 0x06U, req_06_r2, sizeof(req_06_r2), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 7U);
+    assert(response[5] == 0x02U); /* Record 0x02 */
+    assert(response[6] == 3U);    /* Pending counter = 3 */
+
+    /* Query 19 06: Record 0x03 (aging counter) */
+    uint8_t req_06_r3[] = {0x19U, 0x06U, 0xD0U, 0x06U, 0x17U, 0x03U};
+    assert(backend->report(NULL, 0x06U, req_06_r3, sizeof(req_06_r3), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 7U);
+    assert(response[5] == 0x03U); /* Record 0x03 */
+    assert(response[6] == 12U);   /* Aging counter = 12 */
+
+    /* Query 19 06: Record 0x04 (aged counter) */
+    uint8_t req_06_r4[] = {0x19U, 0x06U, 0xD0U, 0x06U, 0x17U, 0x04U};
+    assert(backend->report(NULL, 0x06U, req_06_r4, sizeof(req_06_r4), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == 7U);
+    assert(response[5] == 0x04U); /* Record 0x04 */
+    assert(response[6] == 1U);    /* Aged counter = 1 */
+
+    /* Query 19 06: Record 0xFF (all records) */
+    uint8_t req_06_all[] = {0x19U, 0x06U, 0xD0U, 0x06U, 0x17U, 0xFFU};
+    assert(backend->report(NULL, 0x06U, req_06_all, sizeof(req_06_all), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    /* Response: 5 bytes header + 4 records * 2 bytes = 13 bytes */
+    assert(resp_len == 13U);
+    assert(response[5] == 0x01U && response[6] == 7U);
+    assert(response[7] == 0x02U && response[8] == 3U);
+    assert(response[9] == 0x03U && response[10] == 12U);
+    assert(response[11] == 0x04U && response[12] == 1U);
+
+    /* 4. Test Issue #56: 19 01 status mask filtering vs 19 0A supported DTCs */
+    uds_dtc_app_init();
+    /* 19 0A: All supported DTCs (69 count) */
+    uint8_t req_0a[] = {0x19U, 0x0AU};
+    assert(backend->report(NULL, 0x0AU, req_0a, sizeof(req_0a), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    assert(resp_len == (2U + 69U * 4U)); /* 278 bytes */
+
+    /* 19 01 FF: Active faulted DTCs at boot is exactly 3 (baseline demonstration faults) */
+    uint8_t req_01_ff[] = {0x19U, 0x01U, 0xFFU};
+    assert(backend->report(NULL, 0x01U, req_01_ff, sizeof(req_01_ff), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    uint16_t active_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
+    assert(active_count == 3U);
+
+    /* Reporting a fault on an OEM DTC increments the active fault count */
+    assert(uds_dtc_app_report_event(0xD00617UL, true));
+    /* Report enough events to qualify confirmed fault */
+    for (uint8_t i = 0U; i < 8U; ++i) {
+        (void)uds_dtc_app_report_event(0xD00617UL, true);
+    }
+    assert(backend->report(NULL, 0x01U, req_01_ff, sizeof(req_01_ff), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    active_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
+    assert(active_count == 4U);
+
+    /* Clear all DTCs -> active fault count becomes 0 */
+    assert(uds_dtc_app_clear(NULL, 0xFFFFFFUL) == UDS_RESULT_OK);
+    assert(backend->report(NULL, 0x01U, req_01_ff, sizeof(req_01_ff), response, &resp_len,
+                           sizeof(response)) == UDS_RESULT_OK);
+    active_count = (uint16_t)(((uint16_t)response[3] << 8U) | (uint16_t)response[4]);
+    assert(active_count == 0U);
+}
+
 int main(void) {
     test_dtc_app_all_subfunctions();
     test_iso14229_19_04_conformance();
     test_control_dtc_setting_service();
     test_dtc_wear_leveling_nvm();
     test_bootloader_flow();
+    test_extended_data_and_snapshot_structures();
     return 0;
 }
