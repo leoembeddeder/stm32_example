@@ -457,7 +457,7 @@ static void test_extended_data_and_snapshot_structures(void) {
     uds_dtc_app_init();
     const UdsDtcBackend *backend = uds_dtc_app_get_backend();
     assert(backend != NULL);
-    uint8_t response[256];
+    uint8_t response[512];
     uint16_t resp_len = 0U;
 
     /* 1. Test Issue #58: Global Snapshot Format & Getters/Setters */
