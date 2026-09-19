@@ -32,7 +32,8 @@ add_library(uds_iso_tp_uds STATIC
     src/uds_dtc.c
     src/uds_memory.c
     src/uds_services.c
-    src/uds_wear_leveling.c)
+    src/uds_wear_leveling.c
+    src/uds_flash_fsm.c)
 target_include_directories(uds_iso_tp_uds PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
@@ -49,7 +50,8 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
         src/uds_dtc.c
         src/uds_memory.c
         src/uds_services.c
-        src/uds_wear_leveling.c)
+        src/uds_wear_leveling.c
+        src/uds_flash_fsm.c)
     target_include_directories(uds_iso_tp_c99_portability PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
@@ -186,6 +188,17 @@ if(UDS_ISO_TP_BUILD_TESTS)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_wear_leveling_contract
              COMMAND uds_iso_tp_wear_leveling_test)
+
+    add_executable(uds_iso_tp_flash_fsm_test
+        tests/uds/test_flash_fsm.c)
+    target_include_directories(uds_iso_tp_flash_fsm_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
+    target_link_libraries(uds_iso_tp_flash_fsm_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_flash_fsm_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_flash_fsm_contract
+             COMMAND uds_iso_tp_flash_fsm_test)
 
     add_executable(uds_iso_tp_did_security_auth_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_did_security_auth_app.c

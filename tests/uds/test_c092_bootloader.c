@@ -224,9 +224,39 @@ static void test_c092_activate_candidate(void) {
     assert(uds_bootloader_activate_candidate() == UDS_DOWNLOAD_SEQUENCE_ERROR);
 }
 
+static void test_c092_bootloader_crc32_mode(void) {
+    uds_bootloader_init();
+    uds_bootloader_set_target(UDS_BL_TARGET_STM32C092);
+    uds_bootloader_set_verification_mode(UDS_BL_VERIFY_MODE_CRC32);
+    assert(uds_bootloader_get_verification_mode() == UDS_BL_VERIFY_MODE_CRC32);
+
+    /* Erase Slot B */
+    uint8_t routine_out[16];
+    uint16_t routine_out_len = 0U;
+    assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_ERASE_MEMORY, NULL, 0U,
+                                          routine_out, &routine_out_len,
+                                          sizeof(routine_out)) == UDS_RESULT_OK);
+
+    /* Test CRC32 verification mode without SHA256 or signature */
+    FirmwareMetadata_t meta;
+    (void)memset(&meta, 0, sizeof(meta));
+    meta.magic = UDS_BL_METADATA_MAGIC;
+    meta.version = 2U;
+    meta.image_size = sizeof(FirmwareMetadata_t);
+    meta.crc32 = 0U; /* Zero CRC ignored */
+
+    assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
+                                          (const uint8_t *)&meta, sizeof(meta), routine_out,
+                                          &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OK);
+    assert(routine_out[0] == 0x00U);
+    assert(uds_bootloader_is_activation_pending());
+    assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_CANDIDATE);
+}
+
 int main(void) {
     test_c092_bootloader_memory_map_and_flow();
     test_c092_bootloader_flash_verify_and_erase_poll();
     test_c092_activate_candidate();
+    test_c092_bootloader_crc32_mode();
     return 0;
 }

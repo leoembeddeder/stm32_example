@@ -366,7 +366,11 @@ static UdsCallbackResult uds_dtc_app_report(void *context, uint8_t subfunction,
             const UdsDtcAppRecord *rec = &rec_storage;
             bool include = false;
             if (subfunction == 0x0AU) {
-                include = true; /* All supported DTCs */
+#if (UDS_DTC_19_0A_ONLY_ACTIVE_DTCS != 0U)
+                include = rec->active;
+#else
+                include = true; /* All supported DTCs per ISO 14229-1 Section 11.3.1.10 */
+#endif
             } else if (rec->active) {
                 if (subfunction == 0x15U) {
                     include = ((rec->status_byte & UDS_DTC_STATUS_CONFIRMED) != 0U);

@@ -1,6 +1,7 @@
 #include "can_transport_fdcan.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #define UDS_C092_FDCAN_TX_MARKER 0xD2U
 
@@ -52,11 +53,14 @@ static uint32_t fdcan_classic_dlc(uint8_t length) {
     }
 }
 
+static FDCAN_HandleTypeDef *s_default_hfdcan = NULL;
+
 void uds_c092_fdcan_transport_init(UdsC092FdcanTransport *transport, FDCAN_HandleTypeDef *hfdcan,
                                    uint32_t request_id, uint32_t response_id) {
     if (transport == NULL)
         return;
     transport->hfdcan = hfdcan;
+    s_default_hfdcan = hfdcan;
     transport->request_id = request_id;
     transport->response_id = response_id;
     transport->tx_pending = false;
@@ -72,30 +76,54 @@ void uds_c092_fdcan_attach_diagnostics(UdsC092FdcanTransport *transport,
         transport->diagnostics = diagnostics;
 }
 
+HAL_StatusTypeDef CANFD_SendClassicMessageEx(FDCAN_HandleTypeDef *hfdcan, uint32_t id,
+                                             const uint8_t *data, uint8_t len,
+                                             uint8_t message_marker) {
+    if ((hfdcan == NULL) || (len > 8U)) {
+        return HAL_ERROR;
+    }
+
+    FDCAN_TxHeaderTypeDef header;
+    (void)memset(&header, 0, sizeof(header));
+    header.Identifier = id;
+#if defined(FDCAN_EXTENDED_ID)
+    header.IdType = (id > 0x7FFU) ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
+#else
+    header.IdType = FDCAN_STANDARD_ID;
+#endif
+    header.TxFrameType = FDCAN_DATA_FRAME;
+    header.DataLength = fdcan_classic_dlc(len);
+    header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+    header.BitRateSwitch = FDCAN_BRS_OFF;
+    header.FDFormat = FDCAN_CLASSIC_CAN;
+    header.TxEventFifoControl = FDCAN_STORE_TX_EVENTS;
+    header.MessageMarker = message_marker;
+
+    return HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &header, data);
+}
+
+void CANFD_SendClassicMessage(uint32_t id, const uint8_t *data, uint8_t len) {
+    if (s_default_hfdcan != NULL) {
+        (void)CANFD_SendClassicMessageEx(s_default_hfdcan, id, data, len, 0U);
+    }
+}
+
 bool uds_c092_fdcan_send(void *context, const IsoTpCanFrame *frame) {
     UdsC092FdcanTransport *transport = (UdsC092FdcanTransport *)context;
     if ((transport == NULL) || (transport->hfdcan == NULL) || (frame == NULL) || frame->is_fd ||
         (frame->dlc > 8U) || transport->tx_pending)
         return false;
 
-    FDCAN_TxHeaderTypeDef header = {0};
-    header.Identifier = frame->can_id;
-    header.IdType = FDCAN_STANDARD_ID;
-    header.TxFrameType = FDCAN_DATA_FRAME;
-    header.DataLength = fdcan_classic_dlc(frame->dlc);
-    header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-    header.BitRateSwitch = FDCAN_BRS_OFF;
-    header.FDFormat = FDCAN_CLASSIC_CAN;
-    header.TxEventFifoControl = FDCAN_STORE_TX_EVENTS;
     transport->tx_marker = (transport->tx_marker + 1U) & 0xFFU;
     if (transport->tx_marker == 0U)
         transport->tx_marker = 1U;
-    header.MessageMarker = transport->tx_marker;
 
     transport->tx_pending = true;
     transport->tx_complete = false;
     transport->tx_error = false;
-    if (HAL_FDCAN_AddMessageToTxFifoQ(transport->hfdcan, &header, frame->data) != HAL_OK) {
+
+    if (CANFD_SendClassicMessageEx(transport->hfdcan, frame->can_id, frame->data, frame->dlc,
+                                   (uint8_t)transport->tx_marker) != HAL_OK) {
         transport->tx_pending = false;
         transport->tx_error = true;
         return false;

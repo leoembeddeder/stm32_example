@@ -118,6 +118,10 @@ static void App_DiagnosticTask(uint32_t now_ms) {
     (void)uds_dtc_app_report_event(0xD00617UL, vbatt_low); /* C100617 ASW_DTC_BatteryVoltLow */
 }
 
+#ifndef UDS_DEMO_RUN_DIRECT_CONTROL_EXAMPLE
+#define UDS_DEMO_RUN_DIRECT_CONTROL_EXAMPLE 0U
+#endif
+
 /**
  * @brief  Demonstrates how to immediately set, clear, and snapshot a fault.
  * @note   These functions are intended for immediate, non-debounced events,
@@ -166,9 +170,9 @@ static void App_DiagnosticDirectControlExample(void) {
      * Mode D: Programmatic Fault Clear (uds_dtc_app_clear_fault)
      * Resets DTC status to 0x50 (cleared), resets counters, invalidates snapshot,
      * and persists cleared state to Flash NVM.
-     * Use when an internal automated recovery routine successfully clears a fault.
+     * Uncomment this line when testing automated fault recovery:
      */
-    (void)uds_dtc_app_clear_fault(0xD00618UL);
+    /* (void)uds_dtc_app_clear_fault(0xD00618UL); */
 }
 /* USER CODE END 0 */
 
@@ -223,6 +227,10 @@ int main(void) {
 
     uds_can_transport_init(&uds_transport, &hcan1, 0x7E0U, 0x7E8U);
     uds_app_init(&uds_transport, uds_platform_now_ms());
+#if (UDS_DEMO_RUN_DIRECT_CONTROL_EXAMPLE != 0U)
+    /* Issue #62: Demonstrates immediate fault qualification & snapshot capture on boot */
+    App_DiagnosticDirectControlExample();
+#endif
     if (HAL_CAN_Start(&hcan1) != HAL_OK ||
         HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
         uds_platform_error();

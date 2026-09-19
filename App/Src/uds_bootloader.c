@@ -232,6 +232,14 @@ void uds_bootloader_set_signature_required(bool required) {
     s_signature_required = required;
 }
 
+void uds_bootloader_set_verification_mode(UdsBootloaderVerifyMode mode) {
+    s_bl_ctx.verify_mode = mode;
+}
+
+UdsBootloaderVerifyMode uds_bootloader_get_verification_mode(void) {
+    return s_bl_ctx.verify_mode;
+}
+
 void uds_bootloader_calculate_manifest_signature(const uint8_t digest32[32],
                                                  uint8_t signature64[64]) {
     if ((digest32 == NULL) || (signature64 == NULL)) {
@@ -577,6 +585,7 @@ void uds_bootloader_set_target(UdsBootloaderTarget target) {
     s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_CONFIRMED;
     s_bl_ctx.staging_metadata.active_slot = 0U;
     s_signature_required = true;
+    s_bl_ctx.verify_mode = UDS_BL_VERIFY_MODE_SHA256_SECURE;
 
     if (target == UDS_BL_TARGET_STM32C092) {
         s_bl_ctx.active_slot_addr = UDS_BL_C092_APP_SLOT_A_START;
@@ -800,6 +809,14 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         if (in_len >= sizeof(FirmwareMetadata_t)) {
             (void)memcpy(&temp_meta, in, sizeof(FirmwareMetadata_t));
             meta = &temp_meta;
+        } else if (in_len == 4U) {
+            /* 4-byte CRC-32 passed directly in routine parameter */
+            temp_meta = s_bl_ctx.staging_metadata;
+            temp_meta.magic = UDS_BL_METADATA_MAGIC;
+            temp_meta.crc32 = ((uint32_t)in[0] << 24) | ((uint32_t)in[1] << 16) |
+                              ((uint32_t)in[2] << 8) | (uint32_t)in[3];
+            meta = &temp_meta;
+            s_bl_ctx.verify_mode = UDS_BL_VERIFY_MODE_CRC32;
         }
 
         /* 1. Magic check */
@@ -811,40 +828,60 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         }
 
         /* 2. Anti-rollback check: Version must be >= currently active monotonic version */
-        if (meta->version < s_bl_ctx.active_version) {
+        if ((meta->version != 0U) && (meta->version < s_bl_ctx.active_version)) {
             s_bl_ctx.last_check_memory_result = 0x02U;
             out[0] = 0x02U; /* Rejected: Version downgrade attempt */
             *out_len = 1U;
             return UDS_RESULT_OUT_OF_RANGE;
         }
 
-        /* 3. Compute SHA-256 over image */
-        uint8_t computed_hash[32];
-        Sha256Ctx sha;
-        sha256_init(&sha);
-        if (meta->image_size > sizeof(FirmwareMetadata_t)) {
-            const uint8_t *payload = (const uint8_t *)(uintptr_t)(s_bl_ctx.target_slot_addr +
-                                                                  sizeof(FirmwareMetadata_t));
-            size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
-            sha256_update(&sha, payload, payload_size);
-        }
-        sha256_final(&sha, computed_hash);
-
-        /* 4. Match hash digest */
-        if (memcmp(computed_hash, meta->sha256, sizeof(computed_hash)) != 0) {
-            s_bl_ctx.last_check_memory_result = 0x03U;
-            out[0] = 0x03U; /* Digest mismatch */
-            *out_len = 1U;
-            return UDS_RESULT_ERROR;
-        }
-
-        /* 5. Cryptographic signature verification */
-        if (s_signature_required) {
-            if (!uds_bootloader_verify_signature(meta->sha256, meta->signature)) {
-                s_bl_ctx.last_check_memory_result = 0x04U;
-                out[0] = 0x04U; /* 0x04: Signature verification failed */
+        /* 3. Verification step (CRC32 or SHA256+Signature) */
+        if (s_bl_ctx.verify_mode == UDS_BL_VERIFY_MODE_CRC32) {
+            uint32_t computed_crc = 0U;
+            if (meta->image_size > sizeof(FirmwareMetadata_t)) {
+                const uint8_t *payload = (const uint8_t *)(uintptr_t)(s_bl_ctx.target_slot_addr +
+                                                                      sizeof(FirmwareMetadata_t));
+                size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
+                computed_crc = bootloader_calc_crc32(payload, (uint32_t)payload_size);
+            } else if (meta->image_size > 0U) {
+                const uint8_t *payload = (const uint8_t *)(uintptr_t)s_bl_ctx.target_slot_addr;
+                computed_crc = bootloader_calc_crc32(payload, meta->image_size);
+            }
+            if ((meta->crc32 != 0U) && (computed_crc != meta->crc32)) {
+                s_bl_ctx.last_check_memory_result = 0x03U;
+                out[0] = 0x03U; /* CRC32 mismatch */
                 *out_len = 1U;
-                return UDS_RESULT_SECURITY_DENIED;
+                return UDS_RESULT_ERROR;
+            }
+        } else {
+            /* Compute SHA-256 over image */
+            uint8_t computed_hash[32];
+            Sha256Ctx sha;
+            sha256_init(&sha);
+            if (meta->image_size > sizeof(FirmwareMetadata_t)) {
+                const uint8_t *payload = (const uint8_t *)(uintptr_t)(s_bl_ctx.target_slot_addr +
+                                                                      sizeof(FirmwareMetadata_t));
+                size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
+                sha256_update(&sha, payload, payload_size);
+            }
+            sha256_final(&sha, computed_hash);
+
+            /* Match hash digest */
+            if (memcmp(computed_hash, meta->sha256, sizeof(computed_hash)) != 0) {
+                s_bl_ctx.last_check_memory_result = 0x03U;
+                out[0] = 0x03U; /* Digest mismatch */
+                *out_len = 1U;
+                return UDS_RESULT_ERROR;
+            }
+
+            /* Cryptographic signature verification */
+            if (s_signature_required) {
+                if (!uds_bootloader_verify_signature(meta->sha256, meta->signature)) {
+                    s_bl_ctx.last_check_memory_result = 0x04U;
+                    out[0] = 0x04U; /* 0x04: Signature verification failed */
+                    *out_len = 1U;
+                    return UDS_RESULT_SECURITY_DENIED;
+                }
             }
         }
 

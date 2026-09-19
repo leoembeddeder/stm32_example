@@ -36,6 +36,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     library/src/uds_services.c
     library/src/endpoint.c
     library/src/uds_wear_leveling.c
+    library/src/uds_flash_fsm.c
     library/crypto/aes.c
     library/crypto/aes_cmac.c
     library/crypto/uds_security_cmac.c

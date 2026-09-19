@@ -98,6 +98,11 @@ typedef struct __attribute__((packed)) {
     uint8_t reserved[12];
 } FirmwareMetadata_t;
 
+typedef enum {
+    UDS_BL_VERIFY_MODE_CRC32 = 0,        /* Non-cryptographic CRC-32 (ISO 14229 A/B swapping) */
+    UDS_BL_VERIFY_MODE_SHA256_SECURE = 1 /* SHA-256 cryptographic digest + signature check */
+} UdsBootloaderVerifyMode;
+
 typedef struct {
     UdsBootloaderTarget target;
     uint32_t active_version;
@@ -110,6 +115,7 @@ typedef struct {
     uint8_t last_erase_result;
     uint8_t last_check_memory_result;
     uint8_t last_check_dependencies_result;
+    UdsBootloaderVerifyMode verify_mode;
     FirmwareMetadata_t staging_metadata;
 } UdsBootloaderContext;
 
@@ -119,6 +125,9 @@ typedef bool (*UdsBootloaderSignatureVerifierFn)(const uint8_t *digest32,
 void uds_bootloader_init(void);
 void uds_bootloader_set_target(UdsBootloaderTarget target);
 UdsBootloaderTarget uds_bootloader_get_target(void);
+
+void uds_bootloader_set_verification_mode(UdsBootloaderVerifyMode mode);
+UdsBootloaderVerifyMode uds_bootloader_get_verification_mode(void);
 
 UdsDownloadMemoryMap uds_bootloader_get_memory_map(void);
 uint32_t uds_bootloader_get_active_version(void);

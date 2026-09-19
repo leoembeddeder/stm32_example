@@ -178,6 +178,16 @@ typedef struct {
 #define UDS_DTC_STATUS_CLEARED                                                                     \
     (UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC | UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC) /* 0x50 */
 
+/**
+ * @brief Subfunction 0x0A (reportSupportedDTC) filtering mode.
+ * 0 = Standard ISO 14229-1 Section 11.3.1.10: returns all supported DTCs from ROM table
+ *     along with their current status byte (e.g. 0x50 when cleared).
+ * 1 = Non-standard / fork mode: returns only DTCs with currently active fault flags.
+ */
+#ifndef UDS_DTC_19_0A_ONLY_ACTIVE_DTCS
+#define UDS_DTC_19_0A_ONLY_ACTIVE_DTCS 0U
+#endif
+
 void uds_dtc_app_init(void);
 const UdsDtcBackend *uds_dtc_app_get_backend(void);
 UdsCallbackResult uds_dtc_app_clear(void *context, uint32_t group_of_dtc);

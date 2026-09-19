@@ -27,6 +27,20 @@ bool uds_c092_fdcan_send(void *context, const IsoTpCanFrame *frame);
 uint8_t uds_c092_fdcan_data_length_bytes(uint32_t data_length_code);
 bool uds_c092_fdcan_tx_complete(void *context);
 bool uds_c092_fdcan_tx_error(void *context);
+
+/**
+ * @brief Standalone modular hardware transmission function for Classic CAN frame via FDCAN peripheral.
+ * Decoupled from ISO-TP context, suitable for direct calling and HAL abstraction.
+ */
+HAL_StatusTypeDef CANFD_SendClassicMessageEx(FDCAN_HandleTypeDef *hfdcan, uint32_t id,
+                                             const uint8_t *data, uint8_t len,
+                                             uint8_t message_marker);
+
+/**
+ * @brief Convenience wrapper matching standard standalone CubeMX signature.
+ * Automatically uses registered active FDCAN handle.
+ */
+void CANFD_SendClassicMessage(uint32_t id, const uint8_t *data, uint8_t len);
 void uds_c092_fdcan_on_tx_event(UdsC092FdcanTransport *transport, uint32_t interrupt_flags);
 /* Mainline fallback: drains stored TX events even when TX-event IRQ wiring is absent. */
 void uds_c092_fdcan_poll_tx_events(UdsC092FdcanTransport *transport);
