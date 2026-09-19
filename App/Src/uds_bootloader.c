@@ -813,6 +813,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
             /* 4-byte CRC-32 passed directly in routine parameter */
             temp_meta = s_bl_ctx.staging_metadata;
             temp_meta.magic = UDS_BL_METADATA_MAGIC;
+            temp_meta.version = s_bl_ctx.active_version;
             temp_meta.crc32 = ((uint32_t)in[0] << 24) | ((uint32_t)in[1] << 16) |
                               ((uint32_t)in[2] << 8) | (uint32_t)in[3];
             meta = &temp_meta;
@@ -828,7 +829,7 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
         }
 
         /* 2. Anti-rollback check: Version must be >= currently active monotonic version */
-        if ((meta->version != 0U) && (meta->version < s_bl_ctx.active_version)) {
+        if (meta->version < s_bl_ctx.active_version) {
             s_bl_ctx.last_check_memory_result = 0x02U;
             out[0] = 0x02U; /* Rejected: Version downgrade attempt */
             *out_len = 1U;
