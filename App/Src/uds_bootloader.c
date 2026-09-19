@@ -152,6 +152,37 @@ static uint32_t bootloader_calc_crc32(const uint8_t *data, uint32_t length) {
     return value ^ 0xFFFFFFFFUL;
 }
 
+static const uint8_t *bootloader_get_slot_ptr(uint32_t address, size_t *avail_len) {
+#if defined(HAL_FLASH_MODULE_ENABLED)
+    if (avail_len != NULL) {
+        *avail_len = (size_t)s_bl_ctx.target_slot_size;
+    }
+    return (const uint8_t *)(uintptr_t)address;
+#else
+    if (address >= s_bl_ctx.target_slot_addr) {
+        uint32_t offset = address - s_bl_ctx.target_slot_addr;
+        if (offset < sizeof(s_mock_flash_slot_b)) {
+            if (avail_len != NULL) {
+                *avail_len = sizeof(s_mock_flash_slot_b) - offset;
+            }
+            return &s_mock_flash_slot_b[offset];
+        }
+    } else {
+        uint32_t offset = (address >= s_bl_ctx.active_slot_addr) ? (address - s_bl_ctx.active_slot_addr) : 0U;
+        if (offset < sizeof(s_mock_flash_slot_a)) {
+            if (avail_len != NULL) {
+                *avail_len = sizeof(s_mock_flash_slot_a) - offset;
+            }
+            return &s_mock_flash_slot_a[offset];
+        }
+    }
+    if (avail_len != NULL) {
+        *avail_len = 0U;
+    }
+    return NULL;
+#endif
+}
+
 static const uint8_t s_oem_root_pubkey[16] = {0xD4U, 0x51U, 0x86U, 0x93U, 0xB6U, 0xA2U,
                                               0x54U, 0x07U, 0x38U, 0x8BU, 0x22U, 0xF6U,
                                               0x1BU, 0x8CU, 0x0DU, 0x48U};
@@ -838,21 +869,29 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
 
         /* 3. Verification step (CRC32 or SHA256+Signature) */
         if (s_bl_ctx.verify_mode == UDS_BL_VERIFY_MODE_CRC32) {
-            uint32_t computed_crc = 0U;
-            if (meta->image_size > sizeof(FirmwareMetadata_t)) {
-                const uint8_t *payload = (const uint8_t *)(uintptr_t)(s_bl_ctx.target_slot_addr +
-                                                                      sizeof(FirmwareMetadata_t));
-                size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
-                computed_crc = bootloader_calc_crc32(payload, (uint32_t)payload_size);
-            } else if (meta->image_size > 0U) {
-                const uint8_t *payload = (const uint8_t *)(uintptr_t)s_bl_ctx.target_slot_addr;
-                computed_crc = bootloader_calc_crc32(payload, meta->image_size);
-            }
-            if ((meta->crc32 != 0U) && (computed_crc != meta->crc32)) {
-                s_bl_ctx.last_check_memory_result = 0x03U;
-                out[0] = 0x03U; /* CRC32 mismatch */
-                *out_len = 1U;
-                return UDS_RESULT_ERROR;
+            if (meta->crc32 != 0U) {
+                uint32_t computed_crc = 0U;
+                size_t avail = 0U;
+                if (meta->image_size > sizeof(FirmwareMetadata_t)) {
+                    size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
+                    const uint8_t *payload = bootloader_get_slot_ptr(
+                        s_bl_ctx.target_slot_addr + (uint32_t)sizeof(FirmwareMetadata_t), &avail);
+                    if ((payload != NULL) && (avail >= payload_size)) {
+                        computed_crc = bootloader_calc_crc32(payload, (uint32_t)payload_size);
+                    }
+                } else if (meta->image_size > 0U) {
+                    const uint8_t *payload =
+                        bootloader_get_slot_ptr(s_bl_ctx.target_slot_addr, &avail);
+                    if ((payload != NULL) && (avail >= meta->image_size)) {
+                        computed_crc = bootloader_calc_crc32(payload, meta->image_size);
+                    }
+                }
+                if (computed_crc != meta->crc32) {
+                    s_bl_ctx.last_check_memory_result = 0x03U;
+                    out[0] = 0x03U; /* CRC32 mismatch */
+                    *out_len = 1U;
+                    return UDS_RESULT_ERROR;
+                }
             }
         } else {
             /* Compute SHA-256 over image */
@@ -860,10 +899,13 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
             Sha256Ctx sha;
             sha256_init(&sha);
             if (meta->image_size > sizeof(FirmwareMetadata_t)) {
-                const uint8_t *payload = (const uint8_t *)(uintptr_t)(s_bl_ctx.target_slot_addr +
-                                                                      sizeof(FirmwareMetadata_t));
                 size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
-                sha256_update(&sha, payload, payload_size);
+                size_t avail = 0U;
+                const uint8_t *payload = bootloader_get_slot_ptr(
+                    s_bl_ctx.target_slot_addr + (uint32_t)sizeof(FirmwareMetadata_t), &avail);
+                if ((payload != NULL) && (avail >= payload_size)) {
+                    sha256_update(&sha, payload, payload_size);
+                }
             }
             sha256_final(&sha, computed_hash);
 
