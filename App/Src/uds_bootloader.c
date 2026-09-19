@@ -168,7 +168,8 @@ static const uint8_t *bootloader_get_slot_ptr(uint32_t address, size_t *avail_le
             return &s_mock_flash_slot_b[offset];
         }
     } else {
-        uint32_t offset = (address >= s_bl_ctx.active_slot_addr) ? (address - s_bl_ctx.active_slot_addr) : 0U;
+        uint32_t offset =
+            (address >= s_bl_ctx.active_slot_addr) ? (address - s_bl_ctx.active_slot_addr) : 0U;
         if (offset < sizeof(s_mock_flash_slot_a)) {
             if (avail_len != NULL) {
                 *avail_len = sizeof(s_mock_flash_slot_a) - offset;
