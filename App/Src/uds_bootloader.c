@@ -320,7 +320,9 @@ UdsDownloadResult uds_bootloader_rollback_candidate(void) {
     s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_ROLLBACK;
     s_bl_ctx.active_slot_addr = (s_bl_ctx.target == UDS_BL_TARGET_STM32C092)
                                     ? UDS_BL_C092_APP_SLOT_A_START
-                                    : UDS_BL_F767_APP_SLOT_A_START;
+                                    : ((s_bl_ctx.target == UDS_BL_TARGET_STM32F103)
+                                           ? UDS_BL_F103_APP_SLOT_A_START
+                                           : UDS_BL_F767_APP_SLOT_A_START);
     s_bl_ctx.active_version = 1U;
     s_bl_ctx.candidate_verified = false;
     s_bl_ctx.staging_metadata.active_slot = 0U;
@@ -644,6 +646,31 @@ void uds_bootloader_set_target(UdsBootloaderTarget target) {
         s_bl_memory_map.program_alignment = 8U;
         s_bl_memory_map.max_block_length = 256U;
         s_bl_memory_map.activation_supported = true;
+    } else if (target == UDS_BL_TARGET_STM32F103) {
+        s_bl_ctx.active_slot_addr = UDS_BL_F103_APP_SLOT_A_START;
+        s_bl_ctx.active_slot_size = UDS_BL_F103_APP_SLOT_A_SIZE;
+        s_bl_ctx.target_slot_addr = UDS_BL_F103_APP_SLOT_B_START;
+        s_bl_ctx.target_slot_size = UDS_BL_F103_APP_SLOT_B_SIZE;
+
+        s_bl_memory_map.staging_image.start = UDS_BL_F103_APP_SLOT_B_START;
+        s_bl_memory_map.staging_image.end_exclusive =
+            UDS_BL_F103_APP_SLOT_B_START + UDS_BL_F103_APP_SLOT_B_SIZE;
+        s_bl_memory_map.bootloader.start = UDS_BL_F103_BOOTLOADER_START;
+        s_bl_memory_map.bootloader.end_exclusive =
+            UDS_BL_F103_BOOTLOADER_START + UDS_BL_F103_BOOTLOADER_SIZE;
+        s_bl_memory_map.active_application.start = UDS_BL_F103_APP_SLOT_A_START;
+        s_bl_memory_map.active_application.end_exclusive =
+            UDS_BL_F103_APP_SLOT_A_START + UDS_BL_F103_APP_SLOT_A_SIZE;
+        s_bl_memory_map.persistent_storage.start = UDS_BL_F103_NVM_METADATA_START;
+        s_bl_memory_map.persistent_storage.end_exclusive =
+            UDS_BL_F103_NVM_METADATA_START + UDS_BL_F103_NVM_METADATA_SIZE;
+        s_bl_memory_map.diagnostic_storage.start = UDS_BL_F103_NVM_METADATA_START;
+        s_bl_memory_map.diagnostic_storage.end_exclusive =
+            UDS_BL_F103_NVM_METADATA_START + UDS_BL_F103_NVM_METADATA_SIZE;
+        s_bl_memory_map.erase_alignment = 4U;
+        s_bl_memory_map.program_alignment = 4U;
+        s_bl_memory_map.max_block_length = 256U;
+        s_bl_memory_map.activation_supported = true;
     } else {
         s_bl_ctx.active_slot_addr = UDS_BL_F767_APP_SLOT_A_START;
         s_bl_ctx.active_slot_size = UDS_BL_F767_APP_SLOT_A_SIZE;
@@ -684,6 +711,8 @@ void uds_bootloader_set_target(UdsBootloaderTarget target) {
 void uds_bootloader_init(void) {
 #if defined(STM32C092xx) || defined(TARGET_STM32C092)
     uds_bootloader_set_target(UDS_BL_TARGET_STM32C092);
+#elif defined(STM32F103xE) || defined(TARGET_STM32F103)
+    uds_bootloader_set_target(UDS_BL_TARGET_STM32F103);
 #else
     uds_bootloader_set_target(UDS_BL_TARGET_STM32F767);
 #endif
