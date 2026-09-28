@@ -2,6 +2,7 @@
 #include "flash_port.h"
 #include "clock_port.h"
 #include "reset_port.h"
+#include <string.h>
 
 #if defined(STM32F767xx) || defined(USE_HAL_DRIVER)
 #include "main.h"
