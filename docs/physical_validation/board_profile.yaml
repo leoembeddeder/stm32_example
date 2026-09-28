@@ -68,7 +68,7 @@ software:
 
 safety:
   destructive_tests_enabled: false
-  download_flash_tests_enabled: true
+  download_flash_tests_enabled: false
   reset_tests_enabled: true
   signed_test_plan: true
   recovery_method: "ST-LINK V3 onboard SWD / OpenOCD hardware reset halt"

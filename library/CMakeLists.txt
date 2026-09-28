@@ -12,23 +12,9 @@ option(UDS_ISO_TP_BUILD_EXAMPLES "Build STM32 adapter contracts" ON)
 option(UDS_ISO_TP_BUILD_PORTABILITY_CHECK "Build strict C99 freestanding portability objects" ON)
 set(UDS_ISO_TP_MAX_PAYLOAD 16384 CACHE STRING "Maximum bounded ISO-TP payload")
 
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../VERSION" UDS_VERSION_STRING)
-string(STRIP "${UDS_VERSION_STRING}" UDS_VERSION_STRING)
-string(REPLACE "." ";" UDS_VERSION_LIST "${UDS_VERSION_STRING}")
-list(GET UDS_VERSION_LIST 0 UDS_VERSION_MAJOR)
-list(GET UDS_VERSION_LIST 1 UDS_VERSION_MINOR)
-list(GET UDS_VERSION_LIST 2 UDS_VERSION_PATCH)
-
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp/uds_version.h.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/include/uds_iso_tp/uds_version.h"
-    @ONLY
-)
-
 add_library(uds_iso_tp_isotp STATIC src/isotp.c)
 target_include_directories(uds_iso_tp_isotp PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_BINARY_DIR}/include)
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_library(uds_iso_tp_crypto STATIC
     crypto/aes.c

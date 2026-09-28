@@ -81,13 +81,15 @@ jobs:
         run: ctest --test-dir build/standalone --output-on-failure
       - name: C092 immediate ECUReset recovery regression
         run: ctest --test-dir build/standalone -R 'uds_iso_tp_c092_immediate_reset_rx_contract|uds_iso_tp_reset_recovery_contract' --output-on-failure
-      - name: Check VERSION and CHANGELOG consistency
+      - name: Check VERSION, CHANGELOG and uds_version.h consistency
         run: |
           python3 -c "
           v = open('VERSION').read().strip()
           c = open('CHANGELOG.md').read()
+          vh = open('library/include/uds_iso_tp/uds_version.h').read()
           assert f'## [{v}]' in c or f'## {v}' in c, f'Version {v} not documented in CHANGELOG.md'
-          print(f'VERSION {v} is documented in CHANGELOG.md')
+          assert f'#define UDS_VERSION_STRING \"{v}\"' in vh, f'Version {v} not in uds_version.h'
+          print(f'VERSION {v} is documented in CHANGELOG.md and uds_version.h')
           "
       - name: Code complexity gate (Lizard CCN <= 15)
         run: |
