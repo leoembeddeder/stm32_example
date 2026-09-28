@@ -68,18 +68,10 @@ typedef struct {
 } UdsBackendSidMapping;
 
 static const UdsBackendSidMapping k_sid_mappings[] = {
-    { 0x23U, get_mem_read },
-    { 0x3DU, get_mem_write },
-    { 0x24U, get_did_scaling },
-    { 0x2CU, get_did_dynamic },
-    { 0x35U, get_xfer_upload },
-    { 0x38U, get_xfer_file },
-    { 0x83U, get_timing },
-    { 0x2AU, get_periodic_data },
-    { 0x86U, get_periodic_event },
-    { 0x87U, get_link_ctrl },
-    { 0x29U, get_auth },
-    { 0x84U, get_sec_data },
+    {0x23U, get_mem_read},    {0x3DU, get_mem_write},     {0x24U, get_did_scaling},
+    {0x2CU, get_did_dynamic}, {0x35U, get_xfer_upload},   {0x38U, get_xfer_file},
+    {0x83U, get_timing},      {0x2AU, get_periodic_data}, {0x86U, get_periodic_event},
+    {0x87U, get_link_ctrl},   {0x29U, get_auth},          {0x84U, get_sec_data},
 };
 
 UdsServiceHandlerFn uds_service_backends_handler(const UdsServiceBackends *backends, uint8_t sid) {

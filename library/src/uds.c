@@ -220,8 +220,7 @@ static const uint8_t k_result_nrc_map[] = {
     [UDS_RESULT_RESPONSE_PENDING] = UDS_NRC_REQUEST_CORRECTLY_RECEIVED_RESPONSE_PENDING,
     [UDS_RESULT_INVALID_FORMAT] = UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
     [UDS_RESULT_SECURITY_DENIED] = UDS_NRC_SECURITY_ACCESS_DENIED,
-    [UDS_RESULT_ERROR] = UDS_NRC_CONDITIONS_NOT_CORRECT
-};
+    [UDS_RESULT_ERROR] = UDS_NRC_CONDITIONS_NOT_CORRECT};
 
 static uint8_t result_to_nrc(UdsCallbackResult result) {
     if ((size_t)result < (sizeof(k_result_nrc_map) / sizeof(k_result_nrc_map[0]))) {
@@ -723,8 +722,8 @@ static UdsCallbackResult service_security_seed(UdsServer *server, const uint8_t 
         return callback_result(server, result, request, response, response_len, capacity);
     }
     if (capacity < (uint16_t)(2U + seed_length)) {
-        return negative_response(server, request, UDS_NRC_RESPONSE_TOO_LONG, response,
-                                 response_len, capacity);
+        return negative_response(server, request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
+                                 capacity);
     }
     if (server->security_level == level) {
         for (uint16_t seed_idx = 0U; seed_idx < seed_length; ++seed_idx) {
@@ -749,8 +748,7 @@ static UdsCallbackResult service_security_seed(UdsServer *server, const uint8_t 
 static UdsCallbackResult service_security_key(UdsServer *server, const uint8_t *request,
                                               uint16_t request_len, uint8_t *response,
                                               uint16_t *response_len, uint16_t capacity,
-                                              uint8_t subfunction, uint8_t level,
-                                              uint32_t now_ms) {
+                                              uint8_t subfunction, uint8_t level, uint32_t now_ms) {
     if ((request_len <= 2U) || !server->security_seed_valid ||
         (server->security_seed_level != level)) {
         return negative_response(server, request, UDS_NRC_REQUEST_SEQUENCE_ERROR, response,
@@ -825,11 +823,11 @@ static UdsCallbackResult service_security_access(UdsServer *server, const uint8_
                                  response_len, capacity);
     }
     if (is_seed) {
-        return service_security_seed(server, request, request_len, response, response_len,
-                                     capacity, subfunction, level, now_ms);
+        return service_security_seed(server, request, request_len, response, response_len, capacity,
+                                     subfunction, level, now_ms);
     }
-    return service_security_key(server, request, request_len, response, response_len,
-                                capacity, subfunction, level, now_ms);
+    return service_security_key(server, request, request_len, response, response_len, capacity,
+                                subfunction, level, now_ms);
 #else
     (void)server;
     (void)now_ms;
@@ -1159,25 +1157,29 @@ static UdsCallbackResult wrap_read_data(UdsServer *s, const uint8_t *req, uint16
 }
 
 static UdsCallbackResult wrap_comm_control(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                           uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                           uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                           uint32_t now) {
     (void)now;
     return service_communication_control(s, req, req_l, res, res_l, cap);
 }
 
 static UdsCallbackResult wrap_write_data(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                         uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                         uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                         uint32_t now) {
     (void)now;
     return service_write_data(s, req, req_l, res, res_l, cap);
 }
 
 static UdsCallbackResult wrap_io_control(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                         uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                         uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                         uint32_t now) {
     (void)now;
     return service_io_control(s, req, req_l, res, res_l, cap);
 }
 
 static UdsCallbackResult wrap_routine_control(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                             uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                              uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                              uint32_t now) {
     (void)now;
     return service_routine_control(s, req, req_l, res, res_l, cap);
 }
@@ -1189,31 +1191,36 @@ static UdsCallbackResult wrap_download(UdsServer *s, const uint8_t *req, uint16_
 }
 
 static UdsCallbackResult wrap_transfer_data(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                            uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                            uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                            uint32_t now) {
     (void)now;
     return service_transfer_data(s, req, req_l, res, res_l, cap);
 }
 
 static UdsCallbackResult wrap_transfer_exit(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                            uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                            uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                            uint32_t now) {
     (void)now;
     return service_transfer_exit(s, req, req_l, res, res_l, cap);
 }
 
 static UdsCallbackResult wrap_tester_present(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                             uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                             uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                             uint32_t now) {
     (void)now;
     return service_tester_present(s, req, req_l, res, res_l, cap);
 }
 
 static UdsCallbackResult wrap_dtc_setting(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                          uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                          uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                          uint32_t now) {
     (void)now;
     return service_dtc_setting(s, req, req_l, res, res_l, cap);
 }
 
 static UdsCallbackResult wrap_modular_backend(UdsServer *s, const uint8_t *req, uint16_t req_l,
-                                              uint8_t *res, uint16_t *res_l, uint16_t cap, uint32_t now) {
+                                              uint8_t *res, uint16_t *res_l, uint16_t cap,
+                                              uint32_t now) {
     (void)now;
     return service_modular_backend(s, req, req_l, res, res_l, cap);
 }
@@ -1229,34 +1236,20 @@ typedef struct {
 } UdsServiceDispatchEntry;
 
 static const UdsServiceDispatchEntry k_service_dispatch_table[] = {
-    {0x10U, service_session_control},
-    {0x11U, wrap_ecu_reset},
-    {0x14U, wrap_clear_dtc},
-    {0x19U, wrap_read_dtc},
-    {0x22U, wrap_read_data},
-    {0x23U, wrap_modular_backend},
-    {0x24U, wrap_modular_backend},
-    {0x27U, service_security_access},
-    {0x28U, wrap_comm_control},
-    {0x29U, wrap_modular_backend},
-    {0x2AU, wrap_modular_backend},
-    {0x2CU, wrap_modular_backend},
-    {0x2EU, wrap_write_data},
-    {0x2FU, wrap_io_control},
-    {0x31U, wrap_routine_control},
-    {0x34U, wrap_download},
-    {0x35U, wrap_modular_backend},
-    {0x36U, wrap_transfer_data},
-    {0x37U, wrap_transfer_exit},
-    {0x38U, wrap_modular_backend},
-    {0x3DU, wrap_modular_backend},
-    {0x3EU, wrap_tester_present},
-    {0x83U, wrap_modular_backend},
-    {0x84U, wrap_modular_backend},
-    {0x85U, wrap_dtc_setting},
-    {0x86U, wrap_modular_backend},
-    {0x87U, wrap_modular_backend}
-};
+    {0x10U, service_session_control}, {0x11U, wrap_ecu_reset},
+    {0x14U, wrap_clear_dtc},          {0x19U, wrap_read_dtc},
+    {0x22U, wrap_read_data},          {0x23U, wrap_modular_backend},
+    {0x24U, wrap_modular_backend},    {0x27U, service_security_access},
+    {0x28U, wrap_comm_control},       {0x29U, wrap_modular_backend},
+    {0x2AU, wrap_modular_backend},    {0x2CU, wrap_modular_backend},
+    {0x2EU, wrap_write_data},         {0x2FU, wrap_io_control},
+    {0x31U, wrap_routine_control},    {0x34U, wrap_download},
+    {0x35U, wrap_modular_backend},    {0x36U, wrap_transfer_data},
+    {0x37U, wrap_transfer_exit},      {0x38U, wrap_modular_backend},
+    {0x3DU, wrap_modular_backend},    {0x3EU, wrap_tester_present},
+    {0x83U, wrap_modular_backend},    {0x84U, wrap_modular_backend},
+    {0x85U, wrap_dtc_setting},        {0x86U, wrap_modular_backend},
+    {0x87U, wrap_modular_backend}};
 
 static uint8_t check_service_attributes(const UdsServer *server, const uint8_t *request,
                                         uint16_t request_len, UdsAddressMode address_mode) {
@@ -1298,14 +1291,15 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
     *response_len = 0U;
     server->last_activity_ms = now_ms;
     uint8_t service = request[0];
-    for (size_t i = 0U; i < (sizeof(k_service_dispatch_table) / sizeof(k_service_dispatch_table[0])); ++i) {
+    for (size_t i = 0U;
+         i < (sizeof(k_service_dispatch_table) / sizeof(k_service_dispatch_table[0])); ++i) {
         if (k_service_dispatch_table[i].sid == service) {
             return k_service_dispatch_table[i].handler(server, request, request_len, response,
                                                        response_len, capacity, now_ms);
         }
     }
-    return negative_response(server, request, UDS_NRC_SERVICE_NOT_SUPPORTED, response,
-                             response_len, capacity);
+    return negative_response(server, request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                             capacity);
 }
 
 UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms) {

@@ -11,7 +11,7 @@
 #define SHA256_H
 
 #define SHA256_DIGEST_SIZE 32U
-#define SHA256_BLOCK_SIZE  64U
+#define SHA256_BLOCK_SIZE 64U
 
 typedef struct {
     uint32_t state[8];

@@ -660,7 +660,8 @@ static void test_dtc_property_count_equals_list_items(void) {
 
     for (int step = 0; step < 20; ++step) {
         /* Inject fault or report event */
-        uint32_t target = sample_dtcs[(size_t)step % (sizeof(sample_dtcs) / sizeof(sample_dtcs[0]))];
+        uint32_t target =
+            sample_dtcs[(size_t)step % (sizeof(sample_dtcs) / sizeof(sample_dtcs[0]))];
         bool failed = (step % 3 != 0);
         (void)uds_dtc_app_report_event(target, failed);
 
@@ -671,8 +672,7 @@ static void test_dtc_property_count_equals_list_items(void) {
             uint8_t req_cnt[] = {0x19U, 0x01U, mask};
             assert(backend->report(NULL, 0x01U, req_cnt, sizeof(req_cnt), resp_cnt, &rlen_cnt,
                                    sizeof(resp_cnt)) == UDS_RESULT_OK);
-            uint16_t count_val =
-                (uint16_t)(((uint16_t)resp_cnt[3] << 8U) | (uint16_t)resp_cnt[4]);
+            uint16_t count_val = (uint16_t)(((uint16_t)resp_cnt[3] << 8U) | (uint16_t)resp_cnt[4]);
 
             uint8_t resp_list[512];
             uint16_t rlen_list = 0U;

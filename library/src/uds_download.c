@@ -95,10 +95,8 @@ static bool validate_download_region(const UdsDownloadMemoryMap *map, uint32_t a
     if (!range_inside(map->staging_image, address, length)) {
         return false;
     }
-    return !overlaps(image, map->bootloader) &&
-           !overlaps(image, map->active_application) &&
-           !overlaps(image, map->persistent_storage) &&
-           !overlaps(image, map->diagnostic_storage);
+    return !overlaps(image, map->bootloader) && !overlaps(image, map->active_application) &&
+           !overlaps(image, map->persistent_storage) && !overlaps(image, map->diagnostic_storage);
 }
 
 UdsDownloadResult uds_download_begin(UdsDownload *download, uint32_t address, uint32_t length,

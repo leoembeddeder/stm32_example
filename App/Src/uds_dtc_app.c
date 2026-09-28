@@ -267,8 +267,10 @@ static bool append_dtc(uint8_t *resp, uint16_t *len, uint16_t cap, const UdsDtcA
            append_byte(resp, len, cap, rec->status_byte);
 }
 
-static bool append_bytes(uint8_t *resp, uint16_t *len, uint16_t cap, const void *src, uint16_t count) {
-    if ((resp == NULL) || (len == NULL) || (src == NULL) || ((uint32_t)*len + (uint32_t)count > (uint32_t)cap)) {
+static bool append_bytes(uint8_t *resp, uint16_t *len, uint16_t cap, const void *src,
+                         uint16_t count) {
+    if ((resp == NULL) || (len == NULL) || (src == NULL) ||
+        ((uint32_t)*len + (uint32_t)count > (uint32_t)cap)) {
         return false;
     }
     (void)memcpy(&resp[*len], src, count);
@@ -288,9 +290,7 @@ static bool append_snapshot_payload(uint8_t *resp, uint16_t *len, uint16_t cap,
     }
     /* Standard OBD Global Snapshot Format per Issue #58 (DID 0x0100: 8 bytes) */
     static const uint8_t s_default_obd_snapshot[11] = {
-        0x01U,
-        (uint8_t)(UDS_DTC_DID_GLOBAL_SNAPSHOT >> 8U),
-        (uint8_t)UDS_DTC_DID_GLOBAL_SNAPSHOT,
+        0x01U, (uint8_t)(UDS_DTC_DID_GLOBAL_SNAPSHOT >> 8U), (uint8_t)UDS_DTC_DID_GLOBAL_SNAPSHOT,
         120U,  /* 12.0V */
         0x03U, /* Global power mode ON */
         0x00U, /* sec */
@@ -303,16 +303,14 @@ static bool append_snapshot_payload(uint8_t *resp, uint16_t *len, uint16_t cap,
     return append_bytes(resp, len, cap, s_default_obd_snapshot, sizeof(s_default_obd_snapshot));
 }
 
-typedef UdsCallbackResult (*DtcSubfnHandler)(uint8_t subfunction,
-                                            const uint8_t *request, uint16_t request_length,
-                                            uint8_t *response, uint16_t *len,
-                                            uint16_t response_capacity);
+typedef UdsCallbackResult (*DtcSubfnHandler)(uint8_t subfunction, const uint8_t *request,
+                                             uint16_t request_length, uint8_t *response,
+                                             uint16_t *len, uint16_t response_capacity);
 
 /* 0x01, 0x07, 0x11, 0x12: Count reporting */
-static UdsCallbackResult dtc_report_count_by_mask(uint8_t subfunction,
-                                                  const uint8_t *request, uint16_t request_length,
-                                                  uint8_t *response, uint16_t *len,
-                                                  uint16_t response_capacity) {
+static UdsCallbackResult dtc_report_count_by_mask(uint8_t subfunction, const uint8_t *request,
+                                                  uint16_t request_length, uint8_t *response,
+                                                  uint16_t *len, uint16_t response_capacity) {
     (void)subfunction;
     uint8_t status_mask = (request_length >= 3U) ? request[2] : 0xFFU;
     uint16_t count = 0U;
@@ -324,12 +322,8 @@ static UdsCallbackResult dtc_report_count_by_mask(uint8_t subfunction,
             count++;
         }
     }
-    uint8_t hdr[4] = {
-        s_dtc_storage.status_availability_mask,
-        0x01U, /* ISO14229-1 format */
-        (uint8_t)(count >> 8U),
-        (uint8_t)count
-    };
+    uint8_t hdr[4] = {s_dtc_storage.status_availability_mask, 0x01U, /* ISO14229-1 format */
+                      (uint8_t)(count >> 8U), (uint8_t)count};
     if (!append_bytes(response, len, response_capacity, hdr, 4U)) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
     }
@@ -337,10 +331,9 @@ static UdsCallbackResult dtc_report_count_by_mask(uint8_t subfunction,
 }
 
 /* 0x02, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x13, 0x15: List reporting */
-static UdsCallbackResult dtc_report_list_by_mask(uint8_t subfunction,
-                                                 const uint8_t *request, uint16_t request_length,
-                                                 uint8_t *response, uint16_t *len,
-                                                 uint16_t response_capacity) {
+static UdsCallbackResult dtc_report_list_by_mask(uint8_t subfunction, const uint8_t *request,
+                                                 uint16_t request_length, uint8_t *response,
+                                                 uint16_t *len, uint16_t response_capacity) {
     uint8_t status_mask = (request_length >= 3U) ? request[2] : 0xFFU;
     if (!append_byte(response, len, response_capacity, s_dtc_storage.status_availability_mask)) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
@@ -374,9 +367,10 @@ static UdsCallbackResult dtc_report_list_by_mask(uint8_t subfunction,
 
 /* 0x03: Snapshot identification */
 static UdsCallbackResult dtc_report_snapshot_identification(uint8_t subfunction,
-                                                           const uint8_t *request, uint16_t request_length,
-                                                           uint8_t *response, uint16_t *len,
-                                                           uint16_t response_capacity) {
+                                                            const uint8_t *request,
+                                                            uint16_t request_length,
+                                                            uint8_t *response, uint16_t *len,
+                                                            uint16_t response_capacity) {
     (void)subfunction;
     (void)request;
     (void)request_length;
@@ -412,10 +406,9 @@ static bool append_matching_snapshot(uint8_t *response, uint16_t *len, uint16_t 
 }
 
 /* 0x04, 0x18: Snapshot Record by DTC */
-static UdsCallbackResult dtc_report_snapshot_by_dtc(uint8_t subfunction,
-                                                    const uint8_t *request, uint16_t request_length,
-                                                    uint8_t *response, uint16_t *len,
-                                                    uint16_t response_capacity) {
+static UdsCallbackResult dtc_report_snapshot_by_dtc(uint8_t subfunction, const uint8_t *request,
+                                                    uint16_t request_length, uint8_t *response,
+                                                    uint16_t *len, uint16_t response_capacity) {
     if (request_length < 5U) {
         return UDS_RESULT_ERROR;
     }
@@ -436,7 +429,8 @@ static UdsCallbackResult dtc_report_snapshot_by_dtc(uint8_t subfunction,
             (void)get_dtc_record(i, &rec);
             if (rec.active) {
                 if (!append_dtc(response, len, response_capacity, &rec) ||
-                    !append_matching_snapshot(response, len, response_capacity, &rec, req_record_num)) {
+                    !append_matching_snapshot(response, len, response_capacity, &rec,
+                                              req_record_num)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
             }
@@ -461,7 +455,8 @@ static UdsCallbackResult dtc_report_snapshot_by_dtc(uint8_t subfunction,
 
 /* 0x05: Snapshot Record by Record Number */
 static UdsCallbackResult dtc_report_snapshot_by_record_number(uint8_t subfunction,
-                                                              const uint8_t *request, uint16_t request_length,
+                                                              const uint8_t *request,
+                                                              uint16_t request_length,
                                                               uint8_t *response, uint16_t *len,
                                                               uint16_t response_capacity) {
     (void)subfunction;
@@ -488,8 +483,9 @@ static UdsCallbackResult dtc_report_snapshot_by_record_number(uint8_t subfunctio
 }
 
 /* Helper to append extended data records for one DTC */
-static bool append_single_extended_data(uint8_t *response, uint16_t *len, uint16_t response_capacity,
-                                        const UdsDtcAppRecord *rec, uint8_t req_rec_num) {
+static bool append_single_extended_data(uint8_t *response, uint16_t *len,
+                                        uint16_t response_capacity, const UdsDtcAppRecord *rec,
+                                        uint8_t req_rec_num) {
     static const struct {
         uint8_t id;
         size_t offset;
@@ -514,10 +510,9 @@ static bool append_single_extended_data(uint8_t *response, uint16_t *len, uint16
 }
 
 /* 0x06, 0x10, 0x19: Extended Data Records by DTC */
-static UdsCallbackResult dtc_report_extended_by_dtc(uint8_t subfunction,
-                                                    const uint8_t *request, uint16_t request_length,
-                                                    uint8_t *response, uint16_t *len,
-                                                    uint16_t response_capacity) {
+static UdsCallbackResult dtc_report_extended_by_dtc(uint8_t subfunction, const uint8_t *request,
+                                                    uint16_t request_length, uint8_t *response,
+                                                    uint16_t *len, uint16_t response_capacity) {
     if (request_length < 5U) {
         return UDS_RESULT_ERROR;
     }
@@ -538,7 +533,8 @@ static UdsCallbackResult dtc_report_extended_by_dtc(uint8_t subfunction,
             (void)get_dtc_record(i, &rec);
             if (rec.active) {
                 if (!append_dtc(response, len, response_capacity, &rec) ||
-                    !append_single_extended_data(response, len, response_capacity, &rec, req_rec_num)) {
+                    !append_single_extended_data(response, len, response_capacity, &rec,
+                                                 req_rec_num)) {
                     return UDS_RESULT_RESPONSE_TOO_LONG;
                 }
             }
@@ -564,10 +560,9 @@ static UdsCallbackResult dtc_report_extended_by_dtc(uint8_t subfunction,
 }
 
 /* 0x08: Severity Record */
-static UdsCallbackResult dtc_report_severity_record(uint8_t subfunction,
-                                                    const uint8_t *request, uint16_t request_length,
-                                                    uint8_t *response, uint16_t *len,
-                                                    uint16_t response_capacity) {
+static UdsCallbackResult dtc_report_severity_record(uint8_t subfunction, const uint8_t *request,
+                                                    uint16_t request_length, uint8_t *response,
+                                                    uint16_t *len, uint16_t response_capacity) {
     (void)subfunction;
     uint8_t status_mask = (request_length >= 3U) ? request[2] : 0xFFU;
     if (!append_byte(response, len, response_capacity, s_dtc_storage.status_availability_mask)) {
@@ -590,8 +585,9 @@ static UdsCallbackResult dtc_report_severity_record(uint8_t subfunction,
 
 /* 0x09: Severity Information of DTC */
 static UdsCallbackResult dtc_report_severity_info_by_dtc(uint8_t subfunction,
-                                                         const uint8_t *request, uint16_t request_length,
-                                                         uint8_t *response, uint16_t *len,
+                                                         const uint8_t *request,
+                                                         uint16_t request_length, uint8_t *response,
+                                                         uint16_t *len,
                                                          uint16_t response_capacity) {
     (void)subfunction;
     if (request_length < 5U) {
@@ -616,9 +612,10 @@ static UdsCallbackResult dtc_report_severity_info_by_dtc(uint8_t subfunction,
 
 /* 0x14: Fault Detection Counter */
 static UdsCallbackResult dtc_report_fault_detection_counter(uint8_t subfunction,
-                                                           const uint8_t *request, uint16_t request_length,
-                                                           uint8_t *response, uint16_t *len,
-                                                           uint16_t response_capacity) {
+                                                            const uint8_t *request,
+                                                            uint16_t request_length,
+                                                            uint8_t *response, uint16_t *len,
+                                                            uint16_t response_capacity) {
     (void)subfunction;
     (void)request;
     (void)request_length;
@@ -627,12 +624,8 @@ static UdsCallbackResult dtc_report_fault_detection_counter(uint8_t subfunction,
         UdsDtcAppRecord rec;
         (void)get_dtc_record(i, &rec);
         if (rec.active) {
-            uint8_t entry[4] = {
-                (uint8_t)(rec.dtc_number >> 16U),
-                (uint8_t)(rec.dtc_number >> 8U),
-                (uint8_t)rec.dtc_number,
-                (uint8_t)rec.fault_counter
-            };
+            uint8_t entry[4] = {(uint8_t)(rec.dtc_number >> 16U), (uint8_t)(rec.dtc_number >> 8U),
+                                (uint8_t)rec.dtc_number, (uint8_t)rec.fault_counter};
             if (!append_bytes(response, len, response_capacity, entry, 4U)) {
                 return UDS_RESULT_RESPONSE_TOO_LONG;
             }
@@ -643,7 +636,8 @@ static UdsCallbackResult dtc_report_fault_detection_counter(uint8_t subfunction,
 
 /* 0x16: reportDTCExtDataRecordByRecordNumber */
 static UdsCallbackResult dtc_report_ext_data_by_record_number(uint8_t subfunction,
-                                                              const uint8_t *request, uint16_t request_length,
+                                                              const uint8_t *request,
+                                                              uint16_t request_length,
                                                               uint8_t *response, uint16_t *len,
                                                               uint16_t response_capacity) {
     (void)subfunction;
@@ -676,7 +670,8 @@ static UdsCallbackResult dtc_report_ext_data_by_record_number(uint8_t subfunctio
 
 /* 0x17: reportUserDefMemoryDTCByStatusMask */
 static UdsCallbackResult dtc_report_user_def_memory_by_mask(uint8_t subfunction,
-                                                            const uint8_t *request, uint16_t request_length,
+                                                            const uint8_t *request,
+                                                            uint16_t request_length,
                                                             uint8_t *response, uint16_t *len,
                                                             uint16_t response_capacity) {
     (void)subfunction;
@@ -701,8 +696,9 @@ static UdsCallbackResult dtc_report_user_def_memory_by_mask(uint8_t subfunction,
 
 /* 0x42: reportDTCBySeverityMaskRecord */
 static UdsCallbackResult dtc_report_severity_mask_record(uint8_t subfunction,
-                                                         const uint8_t *request, uint16_t request_length,
-                                                         uint8_t *response, uint16_t *len,
+                                                         const uint8_t *request,
+                                                         uint16_t request_length, uint8_t *response,
+                                                         uint16_t *len,
                                                          uint16_t response_capacity) {
     (void)subfunction;
     uint8_t group_id = (request_length >= 3U) ? request[2] : 0x00U;
@@ -729,10 +725,9 @@ static UdsCallbackResult dtc_report_severity_mask_record(uint8_t subfunction,
 }
 
 /* 0x55: reportWWHOBDDTCByMaskRecord */
-static UdsCallbackResult dtc_report_wwh_obd_by_mask(uint8_t subfunction,
-                                                    const uint8_t *request, uint16_t request_length,
-                                                    uint8_t *response, uint16_t *len,
-                                                    uint16_t response_capacity) {
+static UdsCallbackResult dtc_report_wwh_obd_by_mask(uint8_t subfunction, const uint8_t *request,
+                                                    uint16_t request_length, uint8_t *response,
+                                                    uint16_t *len, uint16_t response_capacity) {
     (void)subfunction;
     uint8_t group_id = (request_length >= 3U) ? request[2] : 0x00U;
     if (!append_byte(response, len, response_capacity, group_id) ||
@@ -1192,9 +1187,9 @@ static void debounce_fault_failed(UdsDtcRamStatus *rec) {
     }
     if (rec->fault_counter >= 127) {
         uint8_t failed_mask =
-            (uint8_t)(UDS_DTC_STATUS_TEST_FAILED |
-                      UDS_DTC_STATUS_TEST_FAILED_THIS_CYCLE | UDS_DTC_STATUS_PENDING |
-                      UDS_DTC_STATUS_CONFIRMED | UDS_DTC_STATUS_TEST_FAILED_SLC);
+            (uint8_t)(UDS_DTC_STATUS_TEST_FAILED | UDS_DTC_STATUS_TEST_FAILED_THIS_CYCLE |
+                      UDS_DTC_STATUS_PENDING | UDS_DTC_STATUS_CONFIRMED |
+                      UDS_DTC_STATUS_TEST_FAILED_SLC);
         uint8_t completed_mask = (uint8_t)(UDS_DTC_STATUS_TEST_NOT_COMPLETED_SLC |
                                            UDS_DTC_STATUS_TEST_NOT_COMPLETED_TOC);
         rec->fault_counter = 127;

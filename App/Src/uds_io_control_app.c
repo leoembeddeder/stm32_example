@@ -84,7 +84,8 @@ static UdsCallbackResult handle_air_inlet_door(const uint8_t *parameter, uint16_
     return UDS_RESULT_OK;
 }
 
-static UdsCallbackResult handle_egr_iac_return_control(const uint8_t *parameter, uint16_t parameter_len) {
+static UdsCallbackResult handle_egr_iac_return_control(const uint8_t *parameter,
+                                                       uint16_t parameter_len) {
     if (parameter_len == 1U) {
         s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
         s_egr_under_control = false;
@@ -108,7 +109,8 @@ static UdsCallbackResult handle_egr_iac_return_control(const uint8_t *parameter,
     return UDS_RESULT_INVALID_FORMAT;
 }
 
-static UdsCallbackResult handle_egr_iac_reset_default(const uint8_t *parameter, uint16_t parameter_len) {
+static UdsCallbackResult handle_egr_iac_reset_default(const uint8_t *parameter,
+                                                      uint16_t parameter_len) {
     if (parameter_len == 1U) {
         s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
         s_egr_under_control = true;
@@ -132,7 +134,8 @@ static UdsCallbackResult handle_egr_iac_reset_default(const uint8_t *parameter, 
     return UDS_RESULT_INVALID_FORMAT;
 }
 
-static UdsCallbackResult handle_egr_iac_short_term(const uint8_t *parameter, uint16_t parameter_len) {
+static UdsCallbackResult handle_egr_iac_short_term(const uint8_t *parameter,
+                                                   uint16_t parameter_len) {
     if (parameter_len == 3U) {
         if (parameter[1] > 100U) {
             return UDS_RESULT_OUT_OF_RANGE;

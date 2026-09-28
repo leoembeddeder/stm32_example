@@ -569,30 +569,38 @@ static void test_did_registry(void) {
     uint8_t out[64];
     uint16_t len = 0;
     /* Read software version (security 0) */
-    assert(uds_did_registry_read(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, sizeof(out)) == UDS_DID_OK);
+    assert(uds_did_registry_read(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, sizeof(out)) ==
+           UDS_DID_OK);
     assert(len == src.software_version.length);
     assert(memcmp(out, sw_ver, len) == 0);
 
     /* Read serial number with security 0 -> SECURITY_DENIED */
-    assert(uds_did_registry_read(&reg, UDS_DID_SERIAL_NUMBER, 1U, 0U, out, &len, sizeof(out)) == UDS_DID_SECURITY_DENIED);
+    assert(uds_did_registry_read(&reg, UDS_DID_SERIAL_NUMBER, 1U, 0U, out, &len, sizeof(out)) ==
+           UDS_DID_SECURITY_DENIED);
 
     /* Read serial number with security 1 -> OK */
-    assert(uds_did_registry_read(&reg, UDS_DID_SERIAL_NUMBER, 1U, 1U, out, &len, sizeof(out)) == UDS_DID_OK);
+    assert(uds_did_registry_read(&reg, UDS_DID_SERIAL_NUMBER, 1U, 1U, out, &len, sizeof(out)) ==
+           UDS_DID_OK);
     assert(len == src.serial_number.length);
 
     /* Buffer capacity too small */
-    assert(uds_did_registry_read(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, 2U) == UDS_DID_RESPONSE_TOO_LONG);
+    assert(uds_did_registry_read(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, 2U) ==
+           UDS_DID_RESPONSE_TOO_LONG);
 
     /* Write to read-only DID -> NOT_WRITABLE */
-    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, len) == UDS_DID_NOT_WRITABLE);
+    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, len) ==
+           UDS_DID_NOT_WRITABLE);
 
     /* Non-existent DID -> NOT_FOUND */
-    assert(uds_did_registry_read(&reg, 0x1234U, 1U, 0U, out, &len, sizeof(out)) == UDS_DID_NOT_FOUND);
+    assert(uds_did_registry_read(&reg, 0x1234U, 1U, 0U, out, &len, sizeof(out)) ==
+           UDS_DID_NOT_FOUND);
     assert(uds_did_registry_write(&reg, 0x1234U, 1U, 0U, out, len) == UDS_DID_NOT_FOUND);
 
     /* NULL argument checks */
-    assert(uds_did_registry_read(NULL, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, sizeof(out)) == UDS_DID_NOT_FOUND);
-    assert(uds_did_registry_write(NULL, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, len) == UDS_DID_NOT_FOUND);
+    assert(uds_did_registry_read(NULL, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, sizeof(out)) ==
+           UDS_DID_NOT_FOUND);
+    assert(uds_did_registry_write(NULL, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, len) ==
+           UDS_DID_NOT_FOUND);
     assert(uds_did_registry_find(NULL, UDS_DID_SOFTWARE_VERSION) == NULL);
     uds_did_registry_init(NULL, &src);
     uds_did_registry_init(&reg, NULL);

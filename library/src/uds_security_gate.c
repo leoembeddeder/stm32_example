@@ -93,8 +93,8 @@ void uds_security_gate_record_failure(UdsSecurityGate *gate, uint32_t now_ms) {
     if (gate->failed_attempts >= gate->max_attempts) {
         gate->lockout_active = (gate->lockout_ms != 0U);
         gate->lockout_until_ms = now_ms + gate->lockout_ms;
-        gate->state = gate->lockout_active ? UDS_SECURITY_STATE_LOCKOUT
-                                           : UDS_SECURITY_STATE_LOCKED_READY;
+        gate->state =
+            gate->lockout_active ? UDS_SECURITY_STATE_LOCKOUT : UDS_SECURITY_STATE_LOCKED_READY;
     }
 }
 

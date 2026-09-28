@@ -2,12 +2,12 @@
 #include <string.h>
 
 #define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32U - (b))))
-#define CH(x, y, z)    (((x) & (y)) ^ (~(x) & (z)))
-#define MAJ(x, y, z)   (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
-#define EP0(x)         (ROTRIGHT(x, 2U) ^ ROTRIGHT(x, 13U) ^ ROTRIGHT(x, 22U))
-#define EP1(x)         (ROTRIGHT(x, 6U) ^ ROTRIGHT(x, 11U) ^ ROTRIGHT(x, 25U))
-#define SIG0(x)        (ROTRIGHT(x, 7U) ^ ROTRIGHT(x, 18U) ^ ((x) >> 3U))
-#define SIG1(x)        (ROTRIGHT(x, 17U) ^ ROTRIGHT(x, 19U) ^ ((x) >> 10U))
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x, 2U) ^ ROTRIGHT(x, 13U) ^ ROTRIGHT(x, 22U))
+#define EP1(x) (ROTRIGHT(x, 6U) ^ ROTRIGHT(x, 11U) ^ ROTRIGHT(x, 25U))
+#define SIG0(x) (ROTRIGHT(x, 7U) ^ ROTRIGHT(x, 18U) ^ ((x) >> 3U))
+#define SIG1(x) (ROTRIGHT(x, 17U) ^ ROTRIGHT(x, 19U) ^ ((x) >> 10U))
 
 static const uint32_t kSha256K[64] = {
     0x428a2f98UL, 0x71374491UL, 0xb5c0fbcfUL, 0xe9b5dba5UL, 0x3956c25bUL, 0x59f111f1UL,

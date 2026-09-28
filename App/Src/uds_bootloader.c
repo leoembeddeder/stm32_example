@@ -335,7 +335,9 @@ static UdsDownloadResult bootloader_flash_program(void *context, uint32_t addres
     bool ok = hal_flash_program_c092(address, data, length);
 #else
     bool ok = true;
-    (void)address; (void)data; (void)length;
+    (void)address;
+    (void)data;
+    (void)length;
 #endif
     HAL_FLASH_Lock();
     return ok ? UDS_DOWNLOAD_OK : UDS_DOWNLOAD_PROGRAM_ERROR;
@@ -409,9 +411,8 @@ static UdsDownloadResult c092_copy_candidate_to_slot_a(uint32_t image_size, uint
     const uint8_t *src = (const uint8_t *)(uintptr_t)slot_b_addr;
     uint32_t bytes_written = 0U;
     while (bytes_written < image_size) {
-        uint16_t chunk_len = ((image_size - bytes_written) > 256U)
-                                 ? 256U
-                                 : (uint16_t)(image_size - bytes_written);
+        uint16_t chunk_len =
+            ((image_size - bytes_written) > 256U) ? 256U : (uint16_t)(image_size - bytes_written);
         UdsDownloadResult prog_res = bootloader_flash_program(NULL, slot_a_addr + bytes_written,
                                                               &src[bytes_written], chunk_len);
         if (prog_res != UDS_DOWNLOAD_OK) {
@@ -423,8 +424,7 @@ static UdsDownloadResult c092_copy_candidate_to_slot_a(uint32_t image_size, uint
     /* 3. Read back from Slot A and verify CRC32 */
     const uint8_t *dest = (const uint8_t *)(uintptr_t)slot_a_addr;
     uint32_t flash_crc = bootloader_calc_crc32(dest, image_size);
-    if ((s_bl_ctx.staging_metadata.crc32 != 0U) &&
-        (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
+    if ((s_bl_ctx.staging_metadata.crc32 != 0U) && (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
         return UDS_DOWNLOAD_VERIFY_ERROR;
     }
 #else
@@ -438,8 +438,7 @@ static UdsDownloadResult c092_copy_candidate_to_slot_a(uint32_t image_size, uint
     }
 
     uint32_t flash_crc = bootloader_calc_crc32(s_mock_flash_slot_a, copy_len);
-    if ((s_bl_ctx.staging_metadata.crc32 != 0U) &&
-        (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
+    if ((s_bl_ctx.staging_metadata.crc32 != 0U) && (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
         return UDS_DOWNLOAD_VERIFY_ERROR;
     }
 #endif
@@ -669,8 +668,8 @@ UdsCallbackResult uds_bootloader_transfer_exit(void *context, const uint8_t *req
 }
 
 static UdsCallbackResult routine_erase_memory(uint8_t subfunction, const uint8_t *in,
-                                              uint16_t in_len, uint8_t *out,
-                                              uint16_t *out_len, uint16_t capacity) {
+                                              uint16_t in_len, uint8_t *out, uint16_t *out_len,
+                                              uint16_t capacity) {
     (void)in;
     (void)in_len;
     (void)capacity;
@@ -680,8 +679,8 @@ static UdsCallbackResult routine_erase_memory(uint8_t subfunction, const uint8_t
         return UDS_RESULT_OK;
     }
     /* Routine 0xFF00: Erase Slot B */
-    UdsDownloadResult res = bootloader_flash_erase_start(NULL, s_bl_ctx.target_slot_addr,
-                                                         s_bl_ctx.target_slot_size);
+    UdsDownloadResult res =
+        bootloader_flash_erase_start(NULL, s_bl_ctx.target_slot_addr, s_bl_ctx.target_slot_size);
     uint8_t status = (uint8_t)((res == UDS_DOWNLOAD_OK) ? 0x00U : 0x01U);
     s_bl_ctx.last_erase_result = status;
     out[0] = status;
@@ -721,8 +720,7 @@ static bool verify_candidate_crc32(const FirmwareMetadata_t *meta) {
             computed_crc = bootloader_calc_crc32(payload, (uint32_t)payload_size);
         }
     } else if (meta->image_size > 0U) {
-        const uint8_t *payload =
-            bootloader_get_slot_ptr(s_bl_ctx.target_slot_addr, &avail);
+        const uint8_t *payload = bootloader_get_slot_ptr(s_bl_ctx.target_slot_addr, &avail);
         if ((payload != NULL) && (avail >= meta->image_size)) {
             computed_crc = bootloader_calc_crc32(payload, meta->image_size);
         }
@@ -730,7 +728,8 @@ static bool verify_candidate_crc32(const FirmwareMetadata_t *meta) {
     return (computed_crc == meta->crc32);
 }
 
-static UdsCallbackResult verify_candidate_crypto(const FirmwareMetadata_t *meta, uint8_t *out_status) {
+static UdsCallbackResult verify_candidate_crypto(const FirmwareMetadata_t *meta,
+                                                 uint8_t *out_status) {
     uint8_t computed_hash[32];
     Sha256Ctx sha;
     sha256_init(&sha);
@@ -760,8 +759,8 @@ static UdsCallbackResult verify_candidate_crypto(const FirmwareMetadata_t *meta,
 }
 
 static UdsCallbackResult routine_check_memory(uint8_t subfunction, const uint8_t *in,
-                                              uint16_t in_len, uint8_t *out,
-                                              uint16_t *out_len, uint16_t capacity) {
+                                              uint16_t in_len, uint8_t *out, uint16_t *out_len,
+                                              uint16_t capacity) {
     (void)capacity;
     if (subfunction == UDS_ROUTINE_SUBFUNCTION_REQUEST_RESULTS) {
         out[0] = s_bl_ctx.last_check_memory_result;
@@ -844,8 +843,8 @@ static UdsCallbackResult routine_check_dependencies(uint8_t subfunction, const u
 }
 
 typedef UdsCallbackResult (*BootRoutineHandler)(uint8_t subfunction, const uint8_t *in,
-                                                uint16_t in_len, uint8_t *out,
-                                                uint16_t *out_len, uint16_t capacity);
+                                                uint16_t in_len, uint8_t *out, uint16_t *out_len,
+                                                uint16_t capacity);
 
 typedef struct {
     uint16_t routine_id;
@@ -853,10 +852,9 @@ typedef struct {
 } BootRoutineEntry;
 
 static const BootRoutineEntry k_boot_routines[] = {
-    { UDS_BL_ROUTINE_ERASE_MEMORY, routine_erase_memory },
-    { UDS_BL_ROUTINE_CHECK_MEMORY, routine_check_memory },
-    { UDS_BL_ROUTINE_CHECK_DEPENDENCIES, routine_check_dependencies }
-};
+    {UDS_BL_ROUTINE_ERASE_MEMORY, routine_erase_memory},
+    {UDS_BL_ROUTINE_CHECK_MEMORY, routine_check_memory},
+    {UDS_BL_ROUTINE_CHECK_DEPENDENCIES, routine_check_dependencies}};
 
 /* Service 0x31: RoutineControl (0xFF00 Erase, 0x0202 CheckMemory & Anti-Rollback) */
 UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunction,
@@ -880,9 +878,11 @@ UdsCallbackResult uds_bootloader_routine_control(void *context, uint8_t subfunct
 }
 
 static bool is_flash_addr_valid(UdsBootloaderTarget target, uint32_t addr, uint32_t *out_end) {
-    uint32_t base = (target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_FLASH_BASE : UDS_BL_F767_FLASH_BASE;
-    uint32_t end  = (target == UDS_BL_TARGET_STM32C092) ? (UDS_BL_C092_FLASH_BASE + UDS_BL_C092_FLASH_SIZE)
-                                                        : (UDS_BL_F767_FLASH_BASE + UDS_BL_F767_FLASH_SIZE);
+    uint32_t base =
+        (target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_FLASH_BASE : UDS_BL_F767_FLASH_BASE;
+    uint32_t end = (target == UDS_BL_TARGET_STM32C092)
+                       ? (UDS_BL_C092_FLASH_BASE + UDS_BL_C092_FLASH_SIZE)
+                       : (UDS_BL_F767_FLASH_BASE + UDS_BL_F767_FLASH_SIZE);
     if (out_end != NULL) {
         *out_end = end;
     }
@@ -890,15 +890,18 @@ static bool is_flash_addr_valid(UdsBootloaderTarget target, uint32_t addr, uint3
 }
 
 static bool is_msp_valid(UdsBootloaderTarget target, uint32_t msp) {
-    uint32_t ram_start = (target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_RAM_START : UDS_BL_F767_RAM_START;
-    uint32_t ram_end   = (target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_RAM_END   : UDS_BL_F767_RAM_END;
+    uint32_t ram_start =
+        (target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_RAM_START : UDS_BL_F767_RAM_START;
+    uint32_t ram_end =
+        (target == UDS_BL_TARGET_STM32C092) ? UDS_BL_C092_RAM_END : UDS_BL_F767_RAM_END;
     if ((msp & 0x3U) != 0U) {
         return false;
     }
     return (msp >= ram_start) && (msp <= ram_end);
 }
 
-static bool is_reset_handler_valid(uint32_t reset_handler, uint32_t app_vector_addr, uint32_t flash_end) {
+static bool is_reset_handler_valid(uint32_t reset_handler, uint32_t app_vector_addr,
+                                   uint32_t flash_end) {
     if (((reset_handler & 0x1U) == 0U) || (reset_handler == 0xFFFFFFFFUL)) {
         return false;
     }

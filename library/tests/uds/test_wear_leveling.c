@@ -296,7 +296,8 @@ static int strict_flash_erase(uint32_t addr) {
     if (sec >= STRICT_SECTOR_COUNT) {
         return -1;
     }
-    memset(&s_strict_sim.buffer[sec * STRICT_SECTOR_SIZE], s_strict_sim.erased_byte, STRICT_SECTOR_SIZE);
+    memset(&s_strict_sim.buffer[sec * STRICT_SECTOR_SIZE], s_strict_sim.erased_byte,
+           STRICT_SECTOR_SIZE);
     return 0;
 }
 
@@ -354,7 +355,8 @@ static void test_issue_91_flash_granules_and_power_loss(void) {
         };
 
         UdsParamStore store;
-        assert(uds_param_init(&store, &port, 0U, STRICT_SECTOR_COUNT, sizeof(TestData)) == UDS_PARAM_OK);
+        assert(uds_param_init(&store, &port, 0U, STRICT_SECTOR_COUNT, sizeof(TestData)) ==
+               UDS_PARAM_OK);
         assert(store.program_granule == g);
         assert(store.slot_size % g == 0U);
 
@@ -374,12 +376,14 @@ static void test_issue_91_flash_granules_and_power_loss(void) {
         /* Recover after power loss / reboot */
         s_strict_sim.fail_after_write_count = -1;
         UdsParamStore recovered_store;
-        assert(uds_param_init(&recovered_store, &port, 0U, STRICT_SECTOR_COUNT, sizeof(TestData)) == UDS_PARAM_OK);
+        assert(uds_param_init(&recovered_store, &port, 0U, STRICT_SECTOR_COUNT, sizeof(TestData)) ==
+               UDS_PARAM_OK);
         assert(recovered_store.has_active_slot);
 
         TestData rec_data;
         assert(uds_param_load(&recovered_store, &rec_data) == UDS_PARAM_OK);
-        assert(rec_data.sensor_val == (uint16_t)(0x1000U + g)); /* Successfully rolled back to last committed state */
+        assert(rec_data.sensor_val ==
+               (uint16_t)(0x1000U + g)); /* Successfully rolled back to last committed state */
     }
 }
 

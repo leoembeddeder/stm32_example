@@ -219,7 +219,7 @@ static IsoTpStatus rx_single(IsoTpRx *rx, const IsoTpCanFrame *frame, IsoTpRxEve
 }
 
 static IsoTpStatus rx_first(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t now_ms,
-                           IsoTpRxEvent *event) {
+                            IsoTpRxEvent *event) {
     if (frame->dlc < 2U) {
         return ISOTP_ERR_FORMAT;
     }
@@ -252,7 +252,7 @@ static IsoTpStatus rx_first(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t no
 }
 
 static IsoTpStatus rx_consecutive(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t now_ms,
-                                 IsoTpRxEvent *event) {
+                                  IsoTpRxEvent *event) {
     if (!rx->active) {
         return ISOTP_ERR_STATE;
     }
@@ -358,7 +358,7 @@ void isotp_tx_init(IsoTpTx *tx, const IsoTpConfig *config, uint32_t request_id,
 }
 
 static void tx_build_first_frame(IsoTpTx *tx, const uint8_t *payload, uint32_t length,
-                                IsoTpCanFrame *frame) {
+                                 IsoTpCanFrame *frame) {
     clear_frame(frame, tx->response_id, &tx->config);
     uint8_t header = (length <= 4095U) ? 2U : 6U;
     frame->data[0] = (length <= 4095U) ? (uint8_t)(0x10U | ((length >> 8U) & 0x0FU)) : 0x10U;

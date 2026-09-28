@@ -60,19 +60,13 @@ static bool verify_signature_impl(const FirmwareMetadata_t *hdr, const uint8_t *
 }
 
 static const BootIntegrityPolicy k_policy_crc32 = {
-    "CRC32 (Accidental corruption detection only - no security)",
-    verify_crc32_impl
-};
+    "CRC32 (Accidental corruption detection only - no security)", verify_crc32_impl};
 
-static const BootIntegrityPolicy k_policy_sha256 = {
-    "SHA-256 (Cryptographic integrity check)",
-    verify_sha256_impl
-};
+static const BootIntegrityPolicy k_policy_sha256 = {"SHA-256 (Cryptographic integrity check)",
+                                                    verify_sha256_impl};
 
 static const BootIntegrityPolicy k_policy_signature = {
-    "Cryptographic Signature (Authenticity and integrity)",
-    verify_signature_impl
-};
+    "Cryptographic Signature (Authenticity and integrity)", verify_signature_impl};
 
 const BootIntegrityPolicy *boot_verify_policy_crc32(void) {
     return &k_policy_crc32;

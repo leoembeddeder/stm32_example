@@ -83,14 +83,14 @@ static void test_128kib_range_erase_interleaved_uds_service(void) {
         (void)uds_server_tick(&server, service_ticks * 10U);
 
         /* Send TesterPresent (0x3E 0x00) request during erase flight */
-        const uint8_t tp_req[2] = { 0x3E, 0x00 };
+        const uint8_t tp_req[2] = {0x3E, 0x00};
         uint8_t resp_buf[16];
         uint16_t resp_len = 0U;
-        UdsCallbackResult res = uds_server_handle(&server, tp_req, (uint16_t)sizeof(tp_req),
-                                                 resp_buf, &resp_len, (uint16_t)sizeof(resp_buf),
-                                                 service_ticks * 10U);
-        if ((res == UDS_RESULT_OK) && (resp_len == 2U) &&
-            (resp_buf[0] == 0x7EU) && (resp_buf[1] == 0x00U)) {
+        UdsCallbackResult res =
+            uds_server_handle(&server, tp_req, (uint16_t)sizeof(tp_req), resp_buf, &resp_len,
+                              (uint16_t)sizeof(resp_buf), service_ticks * 10U);
+        if ((res == UDS_RESULT_OK) && (resp_len == 2U) && (resp_buf[0] == 0x7EU) &&
+            (resp_buf[1] == 0x00U)) {
             successful_uds_responses++;
         }
     }

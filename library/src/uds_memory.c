@@ -100,9 +100,9 @@ static UdsCallbackResult parse_memory_request(const uint8_t *request, uint16_t r
 }
 
 static UdsCallbackResult validate_memory_access(const UdsMemoryManager *mgr, uint8_t sid,
-                                                uint32_t address, uint32_t size,
-                                                uint32_t max_size, uint32_t flag_req,
-                                                uint32_t flag_sec, const UdsMemoryRegion **out_reg) {
+                                                uint32_t address, uint32_t size, uint32_t max_size,
+                                                uint32_t flag_req, uint32_t flag_sec,
+                                                const UdsMemoryRegion **out_reg) {
     if ((mgr == NULL) || (mgr->config.regions == NULL)) {
         return UDS_RESULT_OUT_OF_RANGE;
     }
@@ -145,18 +145,17 @@ UdsCallbackResult uds_memory_read_handler(void *context, const uint8_t *request,
     uint16_t header_len = 0U;
     uint32_t address = 0U;
     uint32_t size = 0U;
-    UdsCallbackResult parse_res = parse_memory_request(request, request_len, false,
-                                                       &header_len, &address, &size);
+    UdsCallbackResult parse_res =
+        parse_memory_request(request, request_len, false, &header_len, &address, &size);
     if (parse_res != UDS_RESULT_OK) {
         return parse_res;
     }
 
     const UdsMemoryManager *mgr = resolve_manager(context);
     const UdsMemoryRegion *reg = NULL;
-    UdsCallbackResult val_res = validate_memory_access(mgr, 0x23U, address, size,
-                                                       (mgr != NULL) ? mgr->config.max_read_size : 0U,
-                                                       UDS_MEMORY_FLAG_READ,
-                                                       UDS_MEMORY_FLAG_SECURE_READ, &reg);
+    UdsCallbackResult val_res = validate_memory_access(
+        mgr, 0x23U, address, size, (mgr != NULL) ? mgr->config.max_read_size : 0U,
+        UDS_MEMORY_FLAG_READ, UDS_MEMORY_FLAG_SECURE_READ, &reg);
     if (val_res != UDS_RESULT_OK) {
         return val_res;
     }
@@ -189,18 +188,17 @@ UdsCallbackResult uds_memory_write_handler(void *context, const uint8_t *request
     uint16_t header_len = 0U;
     uint32_t address = 0U;
     uint32_t size = 0U;
-    UdsCallbackResult parse_res = parse_memory_request(request, request_len, true,
-                                                       &header_len, &address, &size);
+    UdsCallbackResult parse_res =
+        parse_memory_request(request, request_len, true, &header_len, &address, &size);
     if (parse_res != UDS_RESULT_OK) {
         return parse_res;
     }
 
     const UdsMemoryManager *mgr = resolve_manager(context);
     const UdsMemoryRegion *reg = NULL;
-    UdsCallbackResult val_res = validate_memory_access(mgr, 0x3DU, address, size,
-                                                       (mgr != NULL) ? mgr->config.max_write_size : 0U,
-                                                       UDS_MEMORY_FLAG_WRITE,
-                                                       UDS_MEMORY_FLAG_SECURE_WRITE, &reg);
+    UdsCallbackResult val_res = validate_memory_access(
+        mgr, 0x3DU, address, size, (mgr != NULL) ? mgr->config.max_write_size : 0U,
+        UDS_MEMORY_FLAG_WRITE, UDS_MEMORY_FLAG_SECURE_WRITE, &reg);
     if (val_res != UDS_RESULT_OK) {
         return val_res;
     }

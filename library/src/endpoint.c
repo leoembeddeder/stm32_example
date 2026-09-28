@@ -109,7 +109,8 @@ bool uds_isotp_endpoint_init(UdsIsoTpEndpoint *endpoint, const UdsIsoTpEndpointC
     return true;
 }
 
-static bool is_flow_control_for_endpoint(const UdsIsoTpEndpoint *endpoint, const IsoTpCanFrame *frame) {
+static bool is_flow_control_for_endpoint(const UdsIsoTpEndpoint *endpoint,
+                                         const IsoTpCanFrame *frame) {
     return (frame->can_id == endpoint->config.request_id) && ((frame->data[0] >> 4U) == 3U);
 }
 
@@ -120,8 +121,8 @@ static IsoTpStatus handle_rx_completion(UdsIsoTpEndpoint *endpoint, const IsoTpR
     bool reset_was_pending = uds_server_reset_pending(&endpoint->uds);
     uint16_t response_length = 0U;
     UdsCallbackResult result = uds_server_handle_addressed(
-        &endpoint->uds, event->payload, (uint16_t)event->length, endpoint->response, &response_length,
-        (uint16_t)sizeof(endpoint->response), address_mode, now_ms);
+        &endpoint->uds, event->payload, (uint16_t)event->length, endpoint->response,
+        &response_length, (uint16_t)sizeof(endpoint->response), address_mode, now_ms);
     bool reset_completion = !reset_was_pending && response_reset_pending(&endpoint->uds);
     if (reset_completion)
         reset_event(endpoint, UDS_RESET_EVENT_REQUESTED);

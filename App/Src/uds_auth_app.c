@@ -36,7 +36,7 @@ const UdsAuthenticationServiceBackend *uds_auth_app_get_backend(void) {
 }
 
 static UdsCallbackResult handle_auth_deauth(uint8_t subfunction, uint8_t *response,
-                                             uint16_t *response_length, uint16_t response_capacity) {
+                                            uint16_t *response_length, uint16_t response_capacity) {
     uds_auth_app_deauthenticate();
     if (response_capacity < 3U) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
@@ -49,7 +49,8 @@ static UdsCallbackResult handle_auth_deauth(uint8_t subfunction, uint8_t *respon
 }
 
 static UdsCallbackResult handle_auth_challenge(uint8_t subfunction, uint8_t *response,
-                                               uint16_t *response_length, uint16_t response_capacity) {
+                                               uint16_t *response_length,
+                                               uint16_t response_capacity) {
     if (response_capacity < (2U + UDS_AUTH_CHALLENGE_SIZE)) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
     }
@@ -67,7 +68,8 @@ static UdsCallbackResult handle_auth_challenge(uint8_t subfunction, uint8_t *res
 
 static UdsCallbackResult handle_auth_verify_proof(uint8_t subfunction, const uint8_t *request,
                                                   uint16_t request_length, uint8_t *response,
-                                                  uint16_t *response_length, uint16_t response_capacity) {
+                                                  uint16_t *response_length,
+                                                  uint16_t response_capacity) {
     if ((request_length < (2U + UDS_AUTH_CHALLENGE_SIZE)) || !s_challenge_valid) {
         return UDS_RESULT_SEQUENCE_ERROR;
     }

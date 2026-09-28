@@ -149,8 +149,8 @@ typedef struct {
 
 /* Layout for NVM persistence across power cycles / resets */
 typedef struct {
-    uint16_t magic;          /* UDS_DTC_NV_MAGIC */
-    uint8_t version;         /* UDS_DTC_NV_VERSION */
+    uint16_t magic;  /* UDS_DTC_NV_MAGIC */
+    uint8_t version; /* UDS_DTC_NV_VERSION */
     uint8_t record_count;
     uint8_t snapshot_count;
     uint8_t _pad[3];

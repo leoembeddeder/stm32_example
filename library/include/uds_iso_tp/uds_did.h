@@ -47,8 +47,8 @@ typedef struct {
     uint16_t length;
 } UdsDidValue;
 
-typedef UdsDidResult (*UdsDidReadFn)(const void *context, uint16_t did, uint8_t *data, uint16_t *length,
-                                     uint16_t capacity);
+typedef UdsDidResult (*UdsDidReadFn)(const void *context, uint16_t did, uint8_t *data,
+                                     uint16_t *length, uint16_t capacity);
 typedef UdsDidResult (*UdsDidWriteFn)(void *context, uint16_t did, const uint8_t *data,
                                       uint16_t length);
 

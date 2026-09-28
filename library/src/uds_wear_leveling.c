@@ -129,9 +129,15 @@ int uds_param_init(UdsParamStore *store, const UdsFlashPort *port, uint32_t flas
 
     uint8_t erased_byte = (port->erased_byte != 0U) ? port->erased_byte : 0xFFU;
 
-    uint16_t min_hdr = (sizeof(UdsParamSlotHeader) > (size_t)granule) ? (uint16_t)sizeof(UdsParamSlotHeader) : (uint16_t)granule;
-    uint16_t header_size = (uint16_t)((((uint32_t)min_hdr + (uint32_t)granule - 1U) / (uint32_t)granule) * (uint32_t)granule);
-    uint16_t payload_aligned = (uint16_t)((((uint32_t)data_size + (uint32_t)granule - 1U) / (uint32_t)granule) * (uint32_t)granule);
+    uint16_t min_hdr = (sizeof(UdsParamSlotHeader) > (size_t)granule)
+                           ? (uint16_t)sizeof(UdsParamSlotHeader)
+                           : (uint16_t)granule;
+    uint16_t header_size =
+        (uint16_t)((((uint32_t)min_hdr + (uint32_t)granule - 1U) / (uint32_t)granule) *
+                   (uint32_t)granule);
+    uint16_t payload_aligned =
+        (uint16_t)((((uint32_t)data_size + (uint32_t)granule - 1U) / (uint32_t)granule) *
+                   (uint32_t)granule);
     uint16_t slot_size = (uint16_t)(header_size + payload_aligned);
 
     /* Keep slot_size aligned to at least 16 for backwards compatibility */
@@ -174,8 +180,8 @@ int uds_param_load(const UdsParamStore *store, void *data) {
         return UDS_PARAM_ERR;
     }
 
-    uint32_t addr = slot_addr(store, store->active_sector, store->active_slot) +
-                    (uint32_t)store->header_size;
+    uint32_t addr =
+        slot_addr(store, store->active_sector, store->active_slot) + (uint32_t)store->header_size;
     if (store->port->read(addr, data, store->data_size) != 0) {
         return UDS_PARAM_ERR;
     }
@@ -193,9 +199,8 @@ int uds_param_load(const UdsParamStore *store, void *data) {
     return UDS_PARAM_OK;
 }
 
-static int write_padded_chunked(const UdsParamStore *store, uint32_t addr,
-                                const uint8_t *src, uint16_t src_size,
-                                uint16_t total_size) {
+static int write_padded_chunked(const UdsParamStore *store, uint32_t addr, const uint8_t *src,
+                                uint16_t src_size, uint16_t total_size) {
     uint8_t chunk[64];
     uint16_t written = 0U;
     while (written < total_size) {
@@ -269,8 +274,8 @@ int uds_param_save(UdsParamStore *store, const void *data) {
     hdr.data_size = store->data_size;
     hdr.crc = uds_crc16_ccitt(data, store->data_size);
 
-    if (write_padded_chunked(store, addr, (const uint8_t *)&hdr,
-                             (uint16_t)sizeof(hdr), store->header_size) != UDS_PARAM_OK) {
+    if (write_padded_chunked(store, addr, (const uint8_t *)&hdr, (uint16_t)sizeof(hdr),
+                             store->header_size) != UDS_PARAM_OK) {
         return UDS_PARAM_ERR;
     }
 
@@ -284,7 +289,6 @@ int uds_param_save(UdsParamStore *store, const void *data) {
 
     return UDS_PARAM_OK;
 }
-
 
 int uds_param_erase_all(UdsParamStore *store) {
     if ((store == NULL) || (!store->initialized)) {
