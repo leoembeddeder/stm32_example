@@ -1,5 +1,5 @@
 #include "uds_iso_tp/boot_verify.h"
-#include "sha256.h"
+#include "uds_iso_tp/sha256.h"
 #include <string.h>
 
 static BootSignatureVerifierFn s_sig_verifier = NULL;

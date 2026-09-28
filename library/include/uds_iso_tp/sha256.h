@@ -1,11 +1,14 @@
 /*
  * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
-#ifndef SHA256_H
-#define SHA256_H
+#ifndef UDS_ISO_TP_SHA256_H
+#define UDS_ISO_TP_SHA256_H
 
 #include <stddef.h>
 #include <stdint.h>
+
+#ifndef SHA256_H
+#define SHA256_H
 
 #define SHA256_DIGEST_SIZE 32U
 #define SHA256_BLOCK_SIZE  64U
@@ -25,3 +28,5 @@ void hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *msg, size_t 
                  uint8_t *out);
 
 #endif /* SHA256_H */
+
+#endif /* UDS_ISO_TP_SHA256_H */

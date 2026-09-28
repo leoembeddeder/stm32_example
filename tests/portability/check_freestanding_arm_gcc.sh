@@ -5,7 +5,7 @@ PAYLOAD_BOUND="${1:-4095}"
 OUTPUT_DIR="${2:-build/portability-arm-gcc}"
 
 mkdir -p "$OUTPUT_DIR"
-for source in library/src/*.c; do
+for source in library/src/*.c library/crypto/*.c; do
     object="$OUTPUT_DIR/$(basename "$source" .c).o"
     arm-none-eabi-gcc \
         -mcpu=cortex-m0plus \
@@ -21,6 +21,7 @@ for source in library/src/*.c; do
         -DISOTP_MAX_PAYLOAD="$PAYLOAD_BOUND" \
         -Ilibrary/include \
         -Ilibrary/include/uds_iso_tp \
+        -Ilibrary/crypto \
         -c "$source" \
         -o "$object"
 done
