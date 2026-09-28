@@ -87,13 +87,16 @@ static bool f1_flash_erase_page(uint32_t page_addr) {
 }
 
 static bool f1_flash_program(uint32_t addr, const uint8_t *data, size_t len) {
-    (void)addr; (void)data; (void)len;
+    (void)addr;
+    (void)data;
+    (void)len;
 #if defined(HAL_FLASH_MODULE_ENABLED) && defined(STM32F1xx)
     for (size_t i = 0U; i < len; i += 2U) {
         uint16_t halfword = 0xFFFFU;
         size_t chunk = ((len - i) < 2U) ? (len - i) : 2U;
         (void)memcpy(&halfword, &data[i], chunk);
-        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr + (uint32_t)i, (uint64_t)halfword) != HAL_OK) {
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr + (uint32_t)i, (uint64_t)halfword) !=
+            HAL_OK) {
             return false;
         }
     }

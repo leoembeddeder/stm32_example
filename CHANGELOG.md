@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here. Host validation and target compatibility remain dependent on the exact compiler, MCU, HAL revision, transceiver, and board configuration.
 
+## [1.6.1] - 2026-09-28
+
+### Added
+- **Dedicated Firmware Download Test Suite (`test_download.c`)**:
+  - Validates all states (`IDLE`, `ERASING`, `RECEIVING`, `VERIFYING`, `COMPLETE`, `ABORTED`).
+  - Covers boundary validations, staging memory containment, memory map overlap rejection, chunk alignments, sequence errors, and CRC32 verification.
+- **Enhanced Security Gate & DID Test Coverage**:
+  - Full branch coverage across lockout timings, zero-duration delays, ECU reset clearing, and NULL guards.
+  - Complete DID handler fault injection, session masking, and security level permissions validation.
+- **Hardware Abstraction Ports Integration (`ports/`)**:
+  - Built and tested `uds_iso_tp_ports` library across STM32C0, STM32F1, STM32F4, STM32F7, and STM32G4 in both root cross-build and host test suite (`uds_iso_tp_ports_contract`).
+- **Automated libFuzzer Execution in CI**:
+  - Integrated 15s fuzzing runs in CI workflow executing `fuzz_isotp_rx` and `fuzz_uds_request` under AddressSanitizer and UndefinedBehaviorSanitizer.
+
+### Fixed
+- **Physical Validation Integrity**:
+  - Reverted `board_profile.yaml` to truthful `ready-for-hardware` and `requires-selected-board` states to align with absence of attached physical bench harness in CI.
+- **CI Quality Gates**:
+  - Restored strict coverage thresholds to $\ge 90\%$ lines and $\ge 80\%$ branches after raising download and security gate coverage.
+
 ## [1.6.0] - 2026-09-28
 
 ### Added

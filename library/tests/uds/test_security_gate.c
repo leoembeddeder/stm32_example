@@ -87,10 +87,97 @@ static void test_seed_reuse_and_expiration(void) {
     assert(gate.failed_attempts == 0U);
 }
 
+static void test_null_guards(void) {
+    uds_security_gate_init(NULL, 100U);
+    uds_security_gate_set_timing(NULL, 100U, 200U, 300U, 3U, 400U);
+    uds_security_gate_tick(NULL, 100U);
+    assert(uds_security_gate_delay_active(NULL, 100U) == false);
+    uds_security_gate_invalidate_seed(NULL);
+    uds_security_gate_record_failure(NULL, 100U);
+    uds_security_gate_record_success(NULL, 1U);
+    uds_security_gate_grant_seed(NULL, 1U, 100U);
+    uds_security_gate_reset_session(NULL);
+    uds_security_gate_reset_ecu(NULL, 100U);
+}
+
+static void test_zero_timing_and_branches(void) {
+    UdsSecurityGate gate;
+    uds_security_gate_init(&gate, 0U);
+
+    /* initial_delay_ms = 0 -> initial_delay_active is false */
+    uds_security_gate_set_timing(&gate, 0U, 0U, 0U, 1U, 0U);
+    assert(gate.initial_delay_active == false);
+    assert(uds_security_gate_delay_active(&gate, 0U) == false);
+
+    /* seed_timeout_ms = 0 -> seed_timer_active is false */
+    uds_security_gate_grant_seed(&gate, 1U, 100U);
+    assert(gate.seed_timer_active == false);
+    uds_security_gate_tick(&gate, 1000U);
+    assert(gate.seed_valid == true); /* No timer, seed remains valid until used or failure */
+
+    /* lockout_ms = 0 -> lockout_active is false on failure */
+    uds_security_gate_record_failure(&gate, 1100U);
+    assert(gate.failed_attempts == 1U);
+    assert(gate.lockout_active == false);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKED_READY);
+
+    /* Tick when lockout_active is true but state is not LOCKOUT */
+    gate.lockout_active = true;
+    gate.lockout_until_ms = 1200U;
+    gate.state = UDS_SECURITY_STATE_UNLOCKED;
+    uds_security_gate_tick(&gate, 1300U);
+    assert(gate.lockout_active == false);
+    assert(gate.state == UDS_SECURITY_STATE_UNLOCKED); /* Unlocked state unchanged */
+
+    /* Invalidate seed when state is already LOCKED_READY */
+    gate.state = UDS_SECURITY_STATE_LOCKED_READY;
+    uds_security_gate_invalidate_seed(&gate);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKED_READY);
+}
+
+static void test_reset_session_and_ecu(void) {
+    UdsSecurityGate gate;
+    uds_security_gate_init(&gate, 0U);
+    uds_security_gate_set_timing(&gate, 1000U, 5000U, 2000U, 2U, 0U);
+
+    /* Unlock gate */
+    uds_security_gate_grant_seed(&gate, 1U, 1500U);
+    uds_security_gate_record_success(&gate, 1U);
+    assert(gate.state == UDS_SECURITY_STATE_UNLOCKED);
+    assert(gate.active_level == 1U);
+
+    /* Reset session revokes unlocked state */
+    uds_security_gate_reset_session(&gate);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKED_READY);
+    assert(gate.active_level == 0U);
+
+    /* Reset session when already in LOCKED_READY does not crash */
+    uds_security_gate_reset_session(&gate);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKED_READY);
+
+    /* Cause lockout then ECU reset */
+    uds_security_gate_grant_seed(&gate, 1U, 2000U);
+    uds_security_gate_record_failure(&gate, 2100U);
+    uds_security_gate_grant_seed(&gate, 1U, 2200U);
+    uds_security_gate_record_failure(&gate, 2300U);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKOUT);
+    assert(gate.failed_attempts == 2U);
+
+    /* Full ECU reset clears lockout and counter */
+    uds_security_gate_reset_ecu(&gate, 3000U);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKED_READY);
+    assert(gate.failed_attempts == 0U);
+    assert(gate.lockout_active == false);
+    assert(uds_security_gate_delay_active(&gate, 3000U) == false);
+}
+
 int main(void) {
     test_poweron_delay();
     test_lockout_after_n_failed_attempts();
     test_seed_reuse_and_expiration();
+    test_null_guards();
+    test_zero_timing_and_branches();
+    test_reset_session_and_ecu();
     printf("UDS SecurityGate tests passed successfully.\n");
     return 0;
 }

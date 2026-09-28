@@ -258,6 +258,38 @@ if(UDS_ISO_TP_BUILD_TESTS)
     add_test(NAME uds_iso_tp_security_gate_contract
              COMMAND uds_iso_tp_security_gate_test)
 
+    add_executable(uds_iso_tp_download_test
+        tests/uds/test_download.c)
+    target_include_directories(uds_iso_tp_download_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
+    target_link_libraries(uds_iso_tp_download_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_download_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_download_contract
+             COMMAND uds_iso_tp_download_test)
+
+    add_library(uds_iso_tp_ports STATIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/stm32c0/port_stm32c0.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/stm32f1/port_stm32f1.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/stm32f4/port_stm32f4.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/stm32f7/port_stm32f7.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/stm32g4/port_stm32g4.c)
+    target_include_directories(uds_iso_tp_ports PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/include)
+    target_compile_options(uds_iso_tp_ports PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+
+    add_executable(uds_iso_tp_ports_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/test_ports.c)
+    target_include_directories(uds_iso_tp_ports_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/include)
+    target_link_libraries(uds_iso_tp_ports_test PRIVATE uds_iso_tp_ports)
+    target_compile_options(uds_iso_tp_ports_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_ports_contract
+             COMMAND uds_iso_tp_ports_test)
+
     add_executable(uds_iso_tp_sha256_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/crypto/test_sha256.c)
     target_include_directories(uds_iso_tp_sha256_test PRIVATE

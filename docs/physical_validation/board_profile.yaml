@@ -1,14 +1,14 @@
 schema_version: 1
-campaign_id: "BENCH-VAL-2026-V1.6"
-operator: "Validation Team & CI Bench Engine"
-date_utc: "2026-09-28"
+campaign_id: "TBD"
+operator: "TBD (pending physical bench session)"
+date_utc: "TBD"
 
 classical_can_target:
-  status: "verified-on-hardware"
-  mcu: "STM32F767ZI"
-  board: "NUCLEO-F767ZI Rev B"
+  status: "ready-for-hardware"
+  mcu: "STM32F767"
+  board: "TBD exact board and revision"
   peripheral: "CAN1 bxCAN"
-  transceiver: "SN65HVD230 (3.3V High-Speed CAN Transceiver)"
+  transceiver: "TBD part and operating mode"
   can_pins:
     rx: "PI9"
     tx: "PA12"
@@ -18,57 +18,57 @@ classical_can_target:
   request_can_id: "0x7E0"
   response_can_id: "0x7E8"
   addressing: "11-bit normal addressing"
-  termination_ohms: "Two 120-ohm end terminations verified on bench"
-  power_and_ground: "Isolated bench DC supply 5.0V with common ground reference"
-  peer_interface: "Peak PCAN-USB Pro FD (PCAN-View & python-can)"
+  termination_ohms: "TBD; verify two 120-ohm end terminations"
+  power_and_ground: "TBD"
+  peer_interface: "TBD independent CAN tester or analyzer"
 
 c092_fdcan_classic_target:
-  status: "verified-on-hardware"
-  mcu: "STM32C092RC"
-  board: "NUCLEO-C092RC Rev A"
+  status: "requires-selected-board"
+  mcu: "STM32C092"
+  board: "TBD exact board and revision"
   peripheral: "FDCAN1 in Classic CAN mode"
-  transceiver: "TCAN334 (3.3V CAN Transceiver)"
+  transceiver: "TBD part and operating mode"
   can_pins:
-    rx: "PB8"
-    tx: "PB9"
-  nominal_bitrate_bps: 500000
+    rx: "TBD generated CubeMX pin"
+    tx: "TBD generated CubeMX pin"
+  nominal_bitrate_bps: null
   data_bitrate_bps: null
   bitrate_switch: false
   request_can_id: "0x7E0"
   functional_request_can_id: "0x7DF"
   response_can_id: "0x7E8"
   addressing: "11-bit normal addressing"
-  termination_ohms: "Dual 120-ohm bus end terminations"
-  message_ram_configuration: "Standard 8-element Standard Filter, 3-element FIFO0, 3-element TX Event FIFO"
+  termination_ohms: "TBD; verify two 120-ohm end terminations"
+  message_ram_configuration: "TBD generated HAL FDCAN configuration"
   tx_mode: "FDCAN_TX_FIFO_OPERATION with stored TX events"
   tx_completion: "FDCAN TX Event FIFO new-data callback; no queue-acceptance shortcut"
-  peer_interface: "Peak PCAN-USB Pro FD"
+  peer_interface: "TBD independent CAN tester or analyzer"
 
 can_fd_target:
-  status: "verified-on-hardware"
-  mcu: "STM32G474RE"
-  board: "NUCLEO-G474RE"
-  peripheral: "FDCAN1 in CAN-FD mode"
-  transceiver: "TCAN334G CAN-FD Transceiver"
-  nominal_bitrate_bps: 500000
-  data_bitrate_bps: 2000000
-  bitrate_switch: true
+  status: "requires-selected-board"
+  mcu: "TBD FDCAN-capable STM32"
+  board: "TBD exact board and revision"
+  peripheral: "TBD FDCAN instance"
+  transceiver: "TBD CAN-FD transceiver and mode"
+  nominal_bitrate_bps: null
+  data_bitrate_bps: null
+  bitrate_switch: null
   request_can_id: "0x7E0"
   response_can_id: "0x7E8"
-  addressing: "11-bit normal addressing"
-  message_ram_configuration: "64-byte payload data field size with Bit Rate Switching (BRS)"
-  filters: "Standard ID filter matching 0x7E0 (physical) and 0x7DF (functional)"
-  peer_interface: "Peak PCAN-USB Pro FD / Vector VN1630A"
+  addressing: "11-bit normal addressing unless separately approved"
+  message_ram_configuration: "TBD generated HAL configuration"
+  filters: "TBD generated HAL configuration"
+  peer_interface: "TBD CAN-FD tester or analyzer"
 
 software:
-  firmware_commit: "v1.6.0"
-  toolchain: "GNU Arm Embedded Toolchain 13.3.rel1 (arm-none-eabi-gcc)"
-  hal_revision: "STM32Cube_FW_F7_V1.17.2 / STM32Cube_FW_C0_V1.2.0"
-  linker_script: "STM32F767ZITx_FLASH.ld"
+  firmware_commit: "TBD"
+  toolchain: "TBD arm-none-eabi-gcc version"
+  hal_revision: "TBD STM32CubeF7 or selected family package"
+  linker_script: "TBD"
 
 safety:
   destructive_tests_enabled: false
   download_flash_tests_enabled: false
-  reset_tests_enabled: true
-  signed_test_plan: true
-  recovery_method: "ST-LINK V3 onboard SWD / OpenOCD hardware reset halt"
+  reset_tests_enabled: false
+  signed_test_plan: false
+  recovery_method: "TBD SWD/debug/recovery path"

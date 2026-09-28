@@ -553,6 +553,15 @@ static void test_reentrant_multi_instance_servers(void) {
     assert(response_phy[0] == 0x7FU && response_phy[1] == 0x99U && response_phy[2] == 0x11U);
 }
 
+static UdsDidResult custom_did_write_stub(void *context, uint16_t did, const uint8_t *data,
+                                          uint16_t length) {
+    (void)context;
+    (void)did;
+    (void)data;
+    (void)length;
+    return UDS_DID_OK;
+}
+
 static void test_did_registry(void) {
     uint8_t sw_ver[] = "1.6.0";
     uint8_t sn[] = "SN123456";
@@ -595,6 +604,44 @@ static void test_did_registry(void) {
     assert(uds_did_registry_read(&reg, 0x1234U, 1U, 0U, out, &len, sizeof(out)) ==
            UDS_DID_NOT_FOUND);
     assert(uds_did_registry_write(&reg, 0x1234U, 1U, 0U, out, len) == UDS_DID_NOT_FOUND);
+
+    /* Test session denial and unreadable DID */
+    assert(uds_did_registry_read(&reg, UDS_DID_SOFTWARE_VERSION, 0x99U, 0U, out, &len,
+                                 sizeof(out)) == UDS_DID_SESSION_DENIED);
+
+    /* Test read_allowed == false and NULL read pointer */
+    reg.entries[0].read_allowed = false;
+    assert(uds_did_registry_read(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, sizeof(out)) ==
+           UDS_DID_NOT_READABLE);
+    reg.entries[0].read_allowed = true;
+    reg.entries[0].read = NULL;
+    assert(uds_did_registry_read(&reg, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, sizeof(out)) ==
+           UDS_DID_NOT_READABLE);
+
+    /* Configure entry[0] as writable */
+    reg.entries[0].write_allowed = true;
+    reg.entries[0].write = custom_did_write_stub;
+    reg.entries[0].maximum_length = 4U;
+    reg.entries[0].minimum_security_level = 1U;
+    reg.entries[0].session_mask = UDS_DID_SESSION_ALL_MASK;
+
+    /* Write with wrong session -> SESSION_DENIED */
+    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 0x99U, 1U, out, 2U) ==
+           UDS_DID_SESSION_DENIED);
+    /* Write with session 0x02 (Programming) and 0x03 (Extended) -> allowed sessions */
+    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 0x02U, 1U, out, 2U) ==
+           UDS_DID_OK);
+    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 0x03U, 1U, out, 2U) ==
+           UDS_DID_OK);
+    /* Write with insufficient security -> SECURITY_DENIED */
+    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 0x01U, 0U, out, 2U) ==
+           UDS_DID_SECURITY_DENIED);
+    /* Write exceeding max length -> INVALID_WRITE */
+    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 0x01U, 1U, out, 10U) ==
+           UDS_DID_INVALID_WRITE);
+    /* Valid write */
+    assert(uds_did_registry_write(&reg, UDS_DID_SOFTWARE_VERSION, 0x01U, 1U, out, 4U) ==
+           UDS_DID_OK);
 
     /* NULL argument checks */
     assert(uds_did_registry_read(NULL, UDS_DID_SOFTWARE_VERSION, 1U, 0U, out, &len, sizeof(out)) ==

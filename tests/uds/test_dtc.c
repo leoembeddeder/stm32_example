@@ -58,6 +58,19 @@ int main(void) {
     assert(uds_dtc_request_length_valid(0x15U, 2U));
     assert(uds_dtc_request_length_valid(0x16U, 3U));
     assert(uds_dtc_request_length_valid(0x17U, 4U));
+    assert(!uds_dtc_request_length_valid(0xFFU, 3U));
+    assert(uds_dtc_capability_for_subfunction(0xFFU) == 0U);
+
+    UdsDtcBackend check_backend = {
+        .report = dtc_report,
+        .capabilities = UDS_DTC_CAP_REPORT_NUMBER_BY_STATUS,
+    };
+    assert(uds_dtc_backend_supports(&check_backend, 0x01U));
+    assert(!uds_dtc_backend_supports(&check_backend, 0x02U));
+    assert(!uds_dtc_backend_supports(NULL, 0x01U));
+    check_backend.report = NULL;
+    assert(!uds_dtc_backend_supports(&check_backend, 0x01U));
+    assert(!uds_dtc_backend_supports(&check_backend, 0xFFU));
     assert(uds_dtc_request_length_valid(0x18U, 7U));
     assert(uds_dtc_request_length_valid(0x19U, 7U));
     assert(uds_dtc_request_length_valid(0x42U, 5U));

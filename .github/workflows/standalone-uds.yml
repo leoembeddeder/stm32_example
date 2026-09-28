@@ -94,29 +94,32 @@ jobs:
       - name: Code complexity gate (Lizard CCN <= 15)
         run: |
           pip install lizard
-          lizard -C 15 library/src library/include library/crypto
+          lizard -C 15 library/src library/include library/crypto ports/stm32c0 ports/stm32f1 ports/stm32f4 ports/stm32f7 ports/stm32g4 ports/include
       - name: Instrumented coverage
         run: |
           sudo apt-get install -y gcovr
           cmake -S library -B build/coverage -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON -DCMAKE_C_FLAGS='--coverage -O0 -g'
           cmake --build build/coverage --parallel
           ctest --test-dir build/coverage --output-on-failure
-          gcovr --root . --object-directory build/coverage --filter 'library/src/.*\.c' --gcov-ignore-errors all --merge-mode-functions merge-use-line-0 --fail-under-line 80 --fail-under-branch 60 --txt
+          gcovr --root . --object-directory build/coverage --filter 'library/src/.*\.c' --gcov-ignore-errors all --merge-mode-functions merge-use-line-0 --fail-under-line 90 --fail-under-branch 80 --txt
       - name: Sanitizer build and test
         run: |
           cmake -S library -B build/sanitize -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g'
           cmake --build build/sanitize --parallel
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ctest --test-dir build/sanitize --output-on-failure
+      - name: LibFuzzer execution
+        run: |
+          clang -fsanitize=fuzzer,address,undefined -O1 -g -Ilibrary/include tests/fuzzing/fuzz_isotp_rx.c library/src/isotp.c -o /tmp/fuzz_isotp_rx
+          clang -fsanitize=fuzzer,address,undefined -O1 -g -Ilibrary/include -Ilibrary/include/uds_iso_tp -Ilibrary/crypto tests/fuzzing/fuzz_uds_request.c library/src/*.c library/crypto/*.c -o /tmp/fuzz_uds_request
+          /tmp/fuzz_isotp_rx -max_total_time=10 -timeout=5
+          /tmp/fuzz_uds_request -max_total_time=10 -timeout=5
       - name: Format check
         run: |
-          clang-format --dry-run --Werror library/src/*.c library/include/uds_iso_tp/*.h library/crypto/*.c library/crypto/*.h library/tests/isotp/*.c library/tests/uds/*.c tests/crypto/*.c tests/fixtures/dtc/*.c tests/fixtures/dtc/*.h tests/portability/test_c092_transport_shim.c tests/portability/test_c092_diagnostics.c tests/portability/test_c092_app_shim.c tests/portability/c092_shim/fdcan.h examples/stm32c092/uds_diagnostics.c examples/stm32c092/uds_diagnostics.h tests/security/*.c tests/security/*.h tools/*.c examples/stm32f767_bxcan/*.c examples/stm32f767_bxcan/*.h examples/stm32_fdcan/*.c examples/stm32_fdcan/*.h examples/stm32c092/*.c examples/stm32c092/*.h App/Src/*.c App/Inc/*.h tests/uds/*.c
-
-
-
+          clang-format --dry-run --Werror library/src/*.c library/include/uds_iso_tp/*.h library/crypto/*.c library/crypto/*.h library/tests/isotp/*.c library/tests/uds/*.c tests/crypto/*.c tests/fixtures/dtc/*.c tests/fixtures/dtc/*.h tests/portability/test_c092_transport_shim.c tests/portability/test_c092_diagnostics.c tests/portability/test_c092_app_shim.c tests/portability/c092_shim/fdcan.h tests/portability/test_ports.c ports/include/*.h ports/*/*.c examples/stm32c092/uds_diagnostics.c examples/stm32c092/uds_diagnostics.h tests/security/*.c tests/security/*.h tools/*.c examples/stm32f767_bxcan/*.c examples/stm32f767_bxcan/*.h examples/stm32_fdcan/*.c examples/stm32_fdcan/*.h examples/stm32c092/*.c examples/stm32c092/*.h App/Src/*.c App/Inc/*.h tests/uds/*.c
       - name: Tidy and cppcheck
         run: |
           clang-tidy library/src/*.c library/crypto/*.c -- -std=c11 -Ilibrary/include -Ilibrary/include/uds_iso_tp -Ilibrary/crypto
-          cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c11 --inline-suppr --suppress=missingIncludeSystem -Ilibrary/include -Ilibrary/crypto -Itests/security library/src library/crypto library/tests tests/security tools examples
+          cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c11 --inline-suppr --suppress=missingIncludeSystem -Ilibrary/include -Ilibrary/crypto -Iports/include -Itests/security library/src library/crypto library/tests tests/security tools examples ports
       - name: HIL dry-run reports
         run: |
           python3 -m py_compile tests/standalone/run_uds_iso_tp_hil.py

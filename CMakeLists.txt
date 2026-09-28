@@ -44,6 +44,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     library/crypto/aes_cmac.c
     library/crypto/uds_security_cmac.c
     library/crypto/sha256.c
+    ports/stm32f7/port_stm32f7.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
@@ -51,6 +52,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     library/include
     library/include/uds_iso_tp
     library/crypto
+    ports/include
 )
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE

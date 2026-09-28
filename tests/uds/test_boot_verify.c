@@ -70,13 +70,55 @@ static void test_signature_policy(void) {
     hdr.signature[0] = (uint8_t)(hdr.sha256[0] ^ 0xFFU);
     assert(boot_verify_image(&hdr, image, sizeof(image)) == false);
 
+    /* Signature verification when SHA256 digest fails */
+    uint8_t corrupted[64];
+    memcpy(corrupted, image, sizeof(image));
+    corrupted[0] ^= 0x55U;
+    assert(boot_verify_image(&hdr, corrupted, sizeof(corrupted)) == false);
+
     boot_verify_set_signature_verifier(NULL);
+}
+
+static void test_null_guards_and_edge_cases(void) {
+    FirmwareMetadata_t hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    const uint8_t image[16] = {0};
+
+    /* CRC calc with NULL */
+    assert(boot_calc_crc32(NULL, 0U) == 0U);
+    assert(boot_calc_crc32(image, 0U) == 0U);
+
+    /* Verify with NULL header or NULL image or 0 len across policies */
+    boot_verify_set_policy(boot_verify_policy_crc32());
+    assert(boot_verify_image(NULL, image, sizeof(image)) == false);
+    assert(boot_verify_image(&hdr, NULL, sizeof(image)) == false);
+    assert(boot_verify_image(&hdr, image, 0U) == false);
+
+    boot_verify_set_policy(boot_verify_policy_sha256());
+    assert(boot_verify_image(NULL, image, sizeof(image)) == false);
+    assert(boot_verify_image(&hdr, NULL, sizeof(image)) == false);
+    assert(boot_verify_image(&hdr, image, 0U) == false);
+
+    boot_verify_set_policy(boot_verify_policy_signature());
+    assert(boot_verify_image(NULL, image, sizeof(image)) == false);
+    assert(boot_verify_image(&hdr, NULL, sizeof(image)) == false);
+    assert(boot_verify_image(&hdr, image, 0U) == false);
+
+    /* Null verify function in policy */
+    BootIntegrityPolicy dummy_policy = {"Empty", NULL};
+    boot_verify_set_policy(&dummy_policy);
+    assert(boot_verify_image(&hdr, image, sizeof(image)) == false);
+
+    /* Set policy back to default */
+    boot_verify_set_policy(NULL);
+    assert(boot_verify_get_policy() == boot_verify_policy_sha256());
 }
 
 int main(void) {
     test_crc32_policy();
     test_sha256_policy();
     test_signature_policy();
+    test_null_guards_and_edge_cases();
     printf("Pluggable BootIntegrityPolicy tests passed successfully.\n");
     return 0;
 }

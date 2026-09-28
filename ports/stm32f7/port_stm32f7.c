@@ -88,13 +88,16 @@ static bool f7_flash_erase_sector(uint32_t sector_addr) {
 }
 
 static bool f7_flash_program(uint32_t addr, const uint8_t *data, size_t len) {
-    (void)addr; (void)data; (void)len;
+    (void)addr;
+    (void)data;
+    (void)len;
 #if defined(HAL_FLASH_MODULE_ENABLED) && defined(STM32F767xx)
     for (size_t i = 0U; i < len; i += 4U) {
         uint32_t word = 0xFFFFFFFFUL;
         size_t chunk = ((len - i) < 4U) ? (len - i) : 4U;
         (void)memcpy(&word, &data[i], chunk);
-        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr + (uint32_t)i, (uint64_t)word) != HAL_OK) {
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr + (uint32_t)i, (uint64_t)word) !=
+            HAL_OK) {
             return false;
         }
     }

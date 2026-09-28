@@ -387,6 +387,34 @@ static void test_issue_91_flash_granules_and_power_loss(void) {
     }
 }
 
+static void test_erase_all_and_null_guards(void) {
+    UdsParamStore store;
+    TestData write_data = {.sensor_val = 0x1234U, .flags = 0x55U, .mode = 0x02U};
+    TestData read_data;
+
+    /* NULL guards */
+    assert(uds_param_init(NULL, &s_test_flash_port, 0U, 3U, 16U) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_init(&store, NULL, 0U, 3U, 16U) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_load(NULL, &read_data) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_load(&store, NULL) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_save(NULL, &write_data) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_save(&store, NULL) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_erase_all(NULL) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_write_count(NULL) == 0U);
+
+    /* Test uds_param_erase_all */
+    memset(s_ram_flash, 0xFF, sizeof(s_ram_flash));
+    assert(uds_param_init(&store, &s_test_flash_port, 0U, TEST_SECTOR_COUNT, sizeof(TestData)) ==
+           UDS_PARAM_OK);
+    assert(uds_param_save(&store, &write_data) == UDS_PARAM_OK);
+    assert(store.has_active_slot);
+    assert(uds_param_write_count(&store) == 1U);
+
+    assert(uds_param_erase_all(&store) == UDS_PARAM_OK);
+    assert(!store.has_active_slot);
+    assert(uds_param_write_count(&store) == 0U);
+}
+
 int main(void) {
     test_crc16();
     test_basic_wear_leveling();
@@ -395,5 +423,6 @@ int main(void) {
     test_sequence_rollover();
     test_dtc_persistence_integration();
     test_issue_91_flash_granules_and_power_loss();
+    test_erase_all_and_null_guards();
     return 0;
 }

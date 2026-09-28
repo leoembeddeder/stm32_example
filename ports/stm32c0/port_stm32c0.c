@@ -87,7 +87,9 @@ static bool c0_flash_erase_page(uint32_t page_addr) {
 }
 
 static bool c0_flash_program(uint32_t addr, const uint8_t *data, size_t len) {
-    (void)addr; (void)data; (void)len;
+    (void)addr;
+    (void)data;
+    (void)len;
 #if defined(HAL_FLASH_MODULE_ENABLED) && (defined(STM32C092xx) || defined(STM32C0xx))
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
     size_t i = 0U;
