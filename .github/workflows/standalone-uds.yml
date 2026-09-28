@@ -18,6 +18,7 @@ on:
       - 'tests/uds/**'
       - 'tests/crypto/**'
       - 'tools/**'
+      - 'ports/**'
       - 'docs/**'
       - 'README.md'
       - 'THIRD_PARTY.md'
@@ -31,6 +32,7 @@ on:
     paths:
       - 'library/**'
       - 'examples/**'
+      - 'ports/**'
       - 'App/**'
       - 'Core/**'
       - 'cmake/**'
