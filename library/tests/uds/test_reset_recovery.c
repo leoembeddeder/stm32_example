@@ -152,7 +152,7 @@ static void test_one_hundred_reset_cycles_and_one_thousand_requests(void) {
         reinitialize_after_reset(&endpoint, &bus, (uint32_t)(cycle + 1U));
         for (uint8_t request = 0U; request < 10U; ++request)
             expect_single_response(&endpoint, &bus, tester_present, 3U, 0x7EU,
-                                   (uint32_t)(cycle + request + 1U));
+                                   (uint32_t)cycle + (uint32_t)request + 1U);
     }
     assert(bus.reset_count == 100U);
 }

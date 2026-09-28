@@ -21,6 +21,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/uds_auth_app.c
     App/Src/uds_dtc_app.c
     App/Src/uds_bootloader.c
+    App/Src/boot_jump.c
     App/Src/uds_io_control_app.c
     App/Src/uds_link_control_app.c
     App/Src/uds_memory_app.c
@@ -37,9 +38,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     library/src/endpoint.c
     library/src/uds_wear_leveling.c
     library/src/uds_flash_fsm.c
+    library/src/uds_security_gate.c
+    library/src/boot_verify.c
     library/crypto/aes.c
     library/crypto/aes_cmac.c
     library/crypto/uds_security_cmac.c
+    library/crypto/sha256.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

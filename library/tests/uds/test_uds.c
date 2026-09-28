@@ -403,6 +403,20 @@ static void test_uds(void) {
            response[2] == 0x90U);
     assert(s_written_did_length == 5U && memcmp(s_written_did_data, "WRITE", 5) == 0);
 
+    /* Negative test: Write to read-only / unmapped DID returns NRC 0x31 (RequestOutOfRange) */
+    uint8_t write_ro_did[] = {0x2EU, 0xF1U, 0x86U, 'N', 'O', 'P', 'E'};
+    assert(uds_server_handle(&server, write_ro_did, sizeof(write_ro_did), response, &response_len,
+                             sizeof(response), 10003U) == UDS_RESULT_OK);
+    assert(response_len == 3U && response[0] == 0x7FU && response[1] == 0x2EU &&
+           response[2] == 0x31U);
+
+    /* Negative test: Truncated 0x2E request (< 4 bytes) returns NRC 0x13 */
+    uint8_t write_trunc[] = {0x2EU, 0xF1U};
+    assert(uds_server_handle(&server, write_trunc, sizeof(write_trunc), response, &response_len,
+                             sizeof(response), 10003U) == UDS_RESULT_OK);
+    assert(response_len == 3U && response[0] == 0x7FU && response[1] == 0x2EU &&
+           response[2] == 0x13U);
+
     uint8_t seed_unlocked[] = {0x27U, 0x01U};
     assert(uds_server_handle(&server, seed_unlocked, sizeof(seed_unlocked), response, &response_len,
                              sizeof(response), 10004U) == UDS_RESULT_OK);

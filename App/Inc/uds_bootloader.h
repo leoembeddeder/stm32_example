@@ -66,7 +66,8 @@ typedef enum { UDS_BL_TARGET_STM32F767 = 0, UDS_BL_TARGET_STM32C092 = 1 } UdsBoo
 #define UDS_BL_RAM_END UDS_BL_F767_RAM_END
 #endif
 
-#define UDS_BL_METADATA_MAGIC 0x5544534DUL /* "UDSM" */
+#include "boot_jump.h"
+#include "uds_iso_tp/boot_verify.h"
 
 #define UDS_BL_ROUTINE_ERASE_MEMORY 0xFF00U
 #define UDS_BL_ROUTINE_CHECK_MEMORY 0x0202U
@@ -83,20 +84,6 @@ typedef enum {
     UDS_BL_SLOT_CONFIRMED = 3,
     UDS_BL_SLOT_ROLLBACK = 4
 } UdsBootloaderSlotStatus;
-
-typedef struct __attribute__((packed)) {
-    uint32_t magic;        /* 0x5544534D */
-    uint32_t version;      /* Monotonic firmware version counter for anti-rollback */
-    uint32_t image_size;   /* Application binary size in bytes */
-    uint32_t crc32;        /* Transmission CRC-32 */
-    uint8_t sha256[32];    /* SHA-256 cryptographic digest */
-    uint8_t signature[64]; /* ECDSA/Ed25519 signature */
-    uint8_t status;        /* UdsBootloaderSlotStatus */
-    uint8_t boot_attempts; /* Current boot attempt count for candidate verification */
-    uint8_t max_attempts;  /* Max allowed boot attempts before automatic rollback */
-    uint8_t active_slot;   /* 0 = Slot A, 1 = Slot B */
-    uint8_t reserved[12];
-} FirmwareMetadata_t;
 
 typedef enum {
     UDS_BL_VERIFY_MODE_CRC32 = 0,        /* Non-cryptographic CRC-32 (ISO 14229 A/B swapping) */

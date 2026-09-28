@@ -32,10 +32,6 @@ uint16_t uds_crc16_ccitt(const void *data, size_t len) {
     return uds_crc16_ccitt_update(UDS_CRC16_CCITT_INIT, data, len);
 }
 
-static uint16_t align16(uint16_t size) {
-    return (uint16_t)(((uint32_t)size + 15U) & ~(uint32_t)15U);
-}
-
 static uint32_t slot_addr(const UdsParamStore *store, uint8_t sector, uint16_t slot) {
     return store->flash_base + ((uint32_t)sector * store->sector_size) +
            ((uint32_t)slot * store->slot_size);
@@ -43,7 +39,7 @@ static uint32_t slot_addr(const UdsParamStore *store, uint8_t sector, uint16_t s
 
 static bool verify_slot_crc(const UdsParamStore *store, uint8_t sector, uint16_t slot,
                             uint16_t expected_crc) {
-    uint32_t addr = slot_addr(store, sector, slot) + (uint32_t)sizeof(UdsParamSlotHeader);
+    uint32_t addr = slot_addr(store, sector, slot) + (uint32_t)store->header_size;
     uint16_t crc = UDS_CRC16_CCITT_INIT;
     uint16_t remaining = store->data_size;
     uint8_t chunk[32];
@@ -73,45 +69,13 @@ static bool read_slot_header(const UdsParamStore *store, uint8_t sector, uint16_
     return verify_slot_crc(store, sector, slot, hdr->crc);
 }
 
-int uds_param_init(UdsParamStore *store, const UdsFlashPort *port, uint32_t flash_base,
-                   uint8_t sector_count, uint16_t data_size) {
-    if ((store == NULL) || (port == NULL) || (port->erase == NULL) || (port->read == NULL) ||
-        (port->write == NULL) || (port->sector_size == NULL) || (sector_count == 0U) ||
-        (data_size == 0U)) {
-        return UDS_PARAM_INVALID_PARAM;
-    }
-
-    uint32_t sec_size = port->sector_size(flash_base);
-    if (sec_size == 0U) {
-        return UDS_PARAM_INVALID_PARAM;
-    }
-
-    uint16_t raw_slot = (uint16_t)(sizeof(UdsParamSlotHeader) + data_size);
-    uint16_t aligned_slot = align16(raw_slot);
-    if ((uint32_t)aligned_slot > sec_size) {
-        return UDS_PARAM_INVALID_PARAM;
-    }
-
-    store->port = port;
-    store->flash_base = flash_base;
-    store->sector_size = sec_size;
-    store->sector_count = sector_count;
-    store->data_size = data_size;
-    store->slot_size = aligned_slot;
-    store->slots_per_sector = (uint16_t)(sec_size / aligned_slot);
-    store->active_sector = 0U;
-    store->active_slot = 0U;
-    store->next_seq = 1U;
-    store->initialized = false;
-    store->has_active_slot = false;
-
-    /* Scan all sectors and slots for the latest valid entry */
+static void scan_for_active_slot(UdsParamStore *store) {
     uint16_t best_seq = 0U;
     uint8_t best_sec = 0U;
     uint16_t best_slot = 0U;
     bool found_valid = false;
 
-    for (uint8_t sec = 0U; sec < sector_count; ++sec) {
+    for (uint8_t sec = 0U; sec < store->sector_count; ++sec) {
         for (uint16_t sl = 0U; sl < store->slots_per_sector; ++sl) {
             UdsParamSlotHeader hdr;
             if (read_slot_header(store, sec, sl, &hdr)) {
@@ -134,6 +98,69 @@ int uds_param_init(UdsParamStore *store, const UdsFlashPort *port, uint32_t flas
         }
         store->has_active_slot = true;
     }
+}
+
+static bool validate_init_args(const UdsParamStore *store, const UdsFlashPort *port,
+                               uint8_t sector_count, uint16_t data_size) {
+    return (store != NULL) && (port != NULL) && (port->erase != NULL) && (port->read != NULL) &&
+           (port->write != NULL) && (port->sector_size != NULL) && (sector_count != 0U) &&
+           (data_size != 0U);
+}
+
+int uds_param_init(UdsParamStore *store, const UdsFlashPort *port, uint32_t flash_base,
+                   uint8_t sector_count, uint16_t data_size) {
+    if (!validate_init_args(store, port, sector_count, data_size)) {
+        return UDS_PARAM_INVALID_PARAM;
+    }
+
+    uint32_t sec_size = port->sector_size(flash_base);
+    if (sec_size == 0U) {
+        return UDS_PARAM_INVALID_PARAM;
+    }
+
+    uint8_t granule = port->program_granule;
+    if (granule == 0U) {
+        granule = 2U;
+    }
+    /* Ensure power of 2 */
+    if ((granule & (uint8_t)(granule - 1U)) != 0U) {
+        return UDS_PARAM_INVALID_PARAM;
+    }
+
+    uint8_t erased_byte = (port->erased_byte != 0U) ? port->erased_byte : 0xFFU;
+
+    uint16_t min_hdr = (sizeof(UdsParamSlotHeader) > (size_t)granule) ? (uint16_t)sizeof(UdsParamSlotHeader) : (uint16_t)granule;
+    uint16_t header_size = (uint16_t)((((uint32_t)min_hdr + (uint32_t)granule - 1U) / (uint32_t)granule) * (uint32_t)granule);
+    uint16_t payload_aligned = (uint16_t)((((uint32_t)data_size + (uint32_t)granule - 1U) / (uint32_t)granule) * (uint32_t)granule);
+    uint16_t slot_size = (uint16_t)(header_size + payload_aligned);
+
+    /* Keep slot_size aligned to at least 16 for backwards compatibility */
+    if ((slot_size % 16U != 0U) && (granule < 16U)) {
+        slot_size = (uint16_t)(((slot_size + 15U) / 16U) * 16U);
+    }
+
+    if ((uint32_t)slot_size > sec_size) {
+        return UDS_PARAM_INVALID_PARAM;
+    }
+
+    store->port = port;
+    store->flash_base = flash_base;
+    store->sector_size = sec_size;
+    store->sector_count = sector_count;
+    store->data_size = data_size;
+    store->slot_size = slot_size;
+    store->header_size = header_size;
+    store->payload_size_aligned = payload_aligned;
+    store->program_granule = granule;
+    store->erased_byte = erased_byte;
+    store->slots_per_sector = (uint16_t)(sec_size / slot_size);
+    store->active_sector = 0U;
+    store->active_slot = 0U;
+    store->next_seq = 1U;
+    store->initialized = false;
+    store->has_active_slot = false;
+
+    scan_for_active_slot(store);
 
     store->initialized = true;
     return UDS_PARAM_OK;
@@ -148,7 +175,7 @@ int uds_param_load(const UdsParamStore *store, void *data) {
     }
 
     uint32_t addr = slot_addr(store, store->active_sector, store->active_slot) +
-                    (uint32_t)sizeof(UdsParamSlotHeader);
+                    (uint32_t)store->header_size;
     if (store->port->read(addr, data, store->data_size) != 0) {
         return UDS_PARAM_ERR;
     }
@@ -166,14 +193,35 @@ int uds_param_load(const UdsParamStore *store, void *data) {
     return UDS_PARAM_OK;
 }
 
-int uds_param_save(UdsParamStore *store, const void *data) {
-    if ((store == NULL) || (!store->initialized) || (data == NULL)) {
-        return UDS_PARAM_INVALID_PARAM;
+static int write_padded_chunked(const UdsParamStore *store, uint32_t addr,
+                                const uint8_t *src, uint16_t src_size,
+                                uint16_t total_size) {
+    uint8_t chunk[64];
+    uint16_t written = 0U;
+    while (written < total_size) {
+        uint16_t to_write = (uint16_t)(total_size - written);
+        if (to_write > (uint16_t)sizeof(chunk)) {
+            to_write = (uint16_t)sizeof(chunk);
+        }
+        memset(chunk, store->erased_byte, to_write);
+        if (written < src_size) {
+            uint16_t copy_len = (uint16_t)(src_size - written);
+            if (copy_len > to_write) {
+                copy_len = to_write;
+            }
+            memcpy(chunk, &src[written], copy_len);
+        }
+        if (store->port->write(addr + written, chunk, to_write) != 0) {
+            return UDS_PARAM_ERR;
+        }
+        written = (uint16_t)(written + to_write);
     }
+    return UDS_PARAM_OK;
+}
 
+static int prepare_next_slot(const UdsParamStore *store, uint8_t *out_sec, uint16_t *out_sl) {
     uint8_t sec = 0U;
     uint16_t sl = 0U;
-
     if (store->has_active_slot) {
         sl = (uint16_t)(store->active_slot + 1U);
         sec = store->active_sector;
@@ -185,29 +233,44 @@ int uds_param_save(UdsParamStore *store, const void *data) {
             }
         }
     } else {
-        sec = 0U;
-        sl = 0U;
         if (store->port->erase(store->flash_base) != 0) {
             return UDS_PARAM_ERR;
         }
     }
+    *out_sec = sec;
+    *out_sl = sl;
+    return UDS_PARAM_OK;
+}
 
+int uds_param_save(UdsParamStore *store, const void *data) {
+    if ((store == NULL) || (!store->initialized) || (data == NULL)) {
+        return UDS_PARAM_INVALID_PARAM;
+    }
+
+    uint8_t sec = 0U;
+    uint16_t sl = 0U;
+    if (prepare_next_slot(store, &sec, &sl) != UDS_PARAM_OK) {
+        return UDS_PARAM_ERR;
+    }
+
+    uint32_t addr = slot_addr(store, sec, sl);
+
+    /* 1. Write payload data first, aligned to program_granule */
+    if (write_padded_chunked(store, addr + store->header_size, (const uint8_t *)data,
+                             store->data_size, store->payload_size_aligned) != UDS_PARAM_OK) {
+        return UDS_PARAM_ERR;
+    }
+
+    /* 2. Write header with magic number last (atomic two-phase commit) */
     UdsParamSlotHeader hdr;
-    memset(&hdr, 0xFF, sizeof(hdr));
+    memset(&hdr, store->erased_byte, sizeof(hdr));
     hdr.magic = UDS_PARAM_MAGIC;
     hdr.seq = store->next_seq;
     hdr.data_size = store->data_size;
     hdr.crc = uds_crc16_ccitt(data, store->data_size);
 
-    uint32_t addr = slot_addr(store, sec, sl);
-
-    /* 1. Write payload data first */
-    if (store->port->write(addr + (uint32_t)sizeof(hdr), data, store->data_size) != 0) {
-        return UDS_PARAM_ERR;
-    }
-
-    /* 2. Write header with magic number last (atomic commit) */
-    if (store->port->write(addr, &hdr, sizeof(hdr)) != 0) {
+    if (write_padded_chunked(store, addr, (const uint8_t *)&hdr,
+                             (uint16_t)sizeof(hdr), store->header_size) != UDS_PARAM_OK) {
         return UDS_PARAM_ERR;
     }
 
@@ -221,6 +284,7 @@ int uds_param_save(UdsParamStore *store, const void *data) {
 
     return UDS_PARAM_OK;
 }
+
 
 int uds_param_erase_all(UdsParamStore *store) {
     if ((store == NULL) || (!store->initialized)) {

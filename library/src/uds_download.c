@@ -86,6 +86,21 @@ void uds_download_init(UdsDownload *download, const UdsDownloadMemoryMap *memory
     download->crc32 = 0xFFFFFFFFUL;
 }
 
+static bool validate_download_region(const UdsDownloadMemoryMap *map, uint32_t address,
+                                     uint32_t length) {
+    UdsDownloadRegion image = {address, address + length};
+    if ((length == 0U) || (image.end_exclusive < address)) {
+        return false;
+    }
+    if (!range_inside(map->staging_image, address, length)) {
+        return false;
+    }
+    return !overlaps(image, map->bootloader) &&
+           !overlaps(image, map->active_application) &&
+           !overlaps(image, map->persistent_storage) &&
+           !overlaps(image, map->diagnostic_storage);
+}
+
 UdsDownloadResult uds_download_begin(UdsDownload *download, uint32_t address, uint32_t length,
                                      uint32_t now_ms) {
     if ((download == NULL) || (download->callbacks.erase_start == NULL) ||
@@ -93,13 +108,7 @@ UdsDownloadResult uds_download_begin(UdsDownload *download, uint32_t address, ui
         (download->callbacks.verify_image == NULL)) {
         return UDS_DOWNLOAD_INVALID_ARGUMENT;
     }
-    UdsDownloadRegion image = {address, address + length};
-    if ((length == 0U) || (image.end_exclusive < address) ||
-        !range_inside(download->memory.staging_image, address, length) ||
-        overlaps(image, download->memory.bootloader) ||
-        overlaps(image, download->memory.active_application) ||
-        overlaps(image, download->memory.persistent_storage) ||
-        overlaps(image, download->memory.diagnostic_storage)) {
+    if (!validate_download_region(&download->memory, address, length)) {
         return UDS_DOWNLOAD_OUT_OF_RANGE;
     }
     if (!aligned(address, download->memory.erase_alignment) ||

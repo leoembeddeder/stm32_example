@@ -1,0 +1,11 @@
+#ifndef UDS_VERSION_H
+#define UDS_VERSION_H
+
+#define UDS_VERSION_MAJOR @UDS_VERSION_MAJOR@U
+#define UDS_VERSION_MINOR @UDS_VERSION_MINOR@U
+#define UDS_VERSION_PATCH @UDS_VERSION_PATCH@U
+#define UDS_VERSION_STRING "@UDS_VERSION_STRING@"
+
+const char *uds_iso_tp_version(void);
+
+#endif /* UDS_VERSION_H */

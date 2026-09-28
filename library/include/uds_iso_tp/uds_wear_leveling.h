@@ -27,6 +27,8 @@ typedef struct {
     int (*read)(uint32_t addr, void *buf, size_t len);
     int (*write)(uint32_t addr, const void *buf, size_t len);
     uint32_t (*sector_size)(uint32_t addr);
+    uint8_t program_granule; /**< Write granularity (2, 4, 8, 16, 32, 64; 0 defaults to 2) */
+    uint8_t erased_byte;     /**< Default byte value of erased flash (usually 0xFF) */
 } UdsFlashPort;
 
 /**
@@ -51,6 +53,10 @@ typedef struct {
     uint16_t data_size;
     uint16_t slot_size;
     uint16_t slots_per_sector;
+    uint16_t header_size;
+    uint16_t payload_size_aligned;
+    uint8_t program_granule;
+    uint8_t erased_byte;
 
     uint8_t active_sector;
     uint16_t active_slot;

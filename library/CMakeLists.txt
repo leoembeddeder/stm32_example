@@ -12,13 +12,29 @@ option(UDS_ISO_TP_BUILD_EXAMPLES "Build STM32 adapter contracts" ON)
 option(UDS_ISO_TP_BUILD_PORTABILITY_CHECK "Build strict C99 freestanding portability objects" ON)
 set(UDS_ISO_TP_MAX_PAYLOAD 16384 CACHE STRING "Maximum bounded ISO-TP payload")
 
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../VERSION" UDS_VERSION_STRING)
+string(STRIP "${UDS_VERSION_STRING}" UDS_VERSION_STRING)
+string(REPLACE "." ";" UDS_VERSION_LIST "${UDS_VERSION_STRING}")
+list(GET UDS_VERSION_LIST 0 UDS_VERSION_MAJOR)
+list(GET UDS_VERSION_LIST 1 UDS_VERSION_MINOR)
+list(GET UDS_VERSION_LIST 2 UDS_VERSION_PATCH)
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp/uds_version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/uds_iso_tp/uds_version.h"
+    @ONLY
+)
+
 add_library(uds_iso_tp_isotp STATIC src/isotp.c)
-target_include_directories(uds_iso_tp_isotp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(uds_iso_tp_isotp PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}/include)
 
 add_library(uds_iso_tp_crypto STATIC
     crypto/aes.c
     crypto/aes_cmac.c
-    crypto/uds_security_cmac.c)
+    crypto/uds_security_cmac.c
+    crypto/sha256.c)
 target_include_directories(uds_iso_tp_crypto PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/crypto)
 target_compile_options(uds_iso_tp_crypto PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
 target_compile_definitions(uds_iso_tp_isotp PUBLIC ISOTP_MAX_PAYLOAD=${UDS_ISO_TP_MAX_PAYLOAD})
@@ -33,12 +49,17 @@ add_library(uds_iso_tp_uds STATIC
     src/uds_memory.c
     src/uds_services.c
     src/uds_wear_leveling.c
-    src/uds_flash_fsm.c)
+    src/uds_flash_fsm.c
+    src/uds_security_gate.c
+    src/boot_verify.c)
 target_include_directories(uds_iso_tp_uds PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+    ${CMAKE_CURRENT_SOURCE_DIR}/crypto
+    ${CMAKE_CURRENT_BINARY_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}/include/uds_iso_tp)
 target_compile_options(uds_iso_tp_uds PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
-target_link_libraries(uds_iso_tp_uds PUBLIC uds_iso_tp_isotp)
+target_link_libraries(uds_iso_tp_uds PUBLIC uds_iso_tp_isotp uds_iso_tp_crypto)
 
 if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
     add_library(uds_iso_tp_c99_portability OBJECT
@@ -51,10 +72,16 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
         src/uds_memory.c
         src/uds_services.c
         src/uds_wear_leveling.c
-        src/uds_flash_fsm.c)
+        src/uds_flash_fsm.c
+        src/uds_security_gate.c
+        src/boot_verify.c
+        crypto/sha256.c)
     target_include_directories(uds_iso_tp_c99_portability PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/include/uds_iso_tp)
     target_compile_definitions(uds_iso_tp_c99_portability PRIVATE
         ISOTP_MAX_PAYLOAD=${UDS_ISO_TP_MAX_PAYLOAD})
     target_compile_options(uds_iso_tp_c99_portability PRIVATE
@@ -151,10 +178,12 @@ if(UDS_ISO_TP_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_bootloader_dtc_app.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_dtc_app.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/boot_jump.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_platform.c)
     target_include_directories(uds_iso_tp_bootloader_dtc_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
     target_link_libraries(uds_iso_tp_bootloader_dtc_test PRIVATE uds_iso_tp_uds)
     target_compile_options(uds_iso_tp_bootloader_dtc_test PRIVATE
@@ -165,10 +194,12 @@ if(UDS_ISO_TP_BUILD_TESTS)
     add_executable(uds_iso_tp_c092_bootloader_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_c092_bootloader.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/boot_jump.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_platform.c)
     target_include_directories(uds_iso_tp_c092_bootloader_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc)
     target_link_libraries(uds_iso_tp_c092_bootloader_test PRIVATE uds_iso_tp_uds)
     target_compile_options(uds_iso_tp_c092_bootloader_test PRIVATE
@@ -228,6 +259,61 @@ if(UDS_ISO_TP_BUILD_TESTS)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_memory_service_contract
              COMMAND uds_iso_tp_memory_service_test)
+
+    add_executable(uds_iso_tp_security_gate_test
+        tests/uds/test_security_gate.c)
+    target_include_directories(uds_iso_tp_security_gate_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_BINARY_DIR}/include)
+    target_link_libraries(uds_iso_tp_security_gate_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_security_gate_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_security_gate_contract
+             COMMAND uds_iso_tp_security_gate_test)
+
+    add_executable(uds_iso_tp_sha256_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/crypto/test_sha256.c)
+    target_include_directories(uds_iso_tp_sha256_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto)
+    target_link_libraries(uds_iso_tp_sha256_test PRIVATE uds_iso_tp_crypto)
+    target_compile_options(uds_iso_tp_sha256_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_sha256_contract
+             COMMAND uds_iso_tp_sha256_test)
+
+    add_executable(uds_iso_tp_boot_verify_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_boot_verify.c)
+    target_include_directories(uds_iso_tp_boot_verify_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto)
+    target_link_libraries(uds_iso_tp_boot_verify_test PRIVATE uds_iso_tp_uds uds_iso_tp_crypto)
+    target_compile_options(uds_iso_tp_boot_verify_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_boot_verify_contract
+             COMMAND uds_iso_tp_boot_verify_test)
+
+    add_executable(uds_iso_tp_fuzz_isotp_rx
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fuzzing/fuzz_isotp_rx.c)
+    target_include_directories(uds_iso_tp_fuzz_isotp_rx PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(uds_iso_tp_fuzz_isotp_rx PRIVATE uds_iso_tp_isotp)
+    target_compile_options(uds_iso_tp_fuzz_isotp_rx PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_fuzz_isotp_rx_contract
+             COMMAND uds_iso_tp_fuzz_isotp_rx)
+
+    add_executable(uds_iso_tp_fuzz_uds_request
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fuzzing/fuzz_uds_request.c)
+    target_include_directories(uds_iso_tp_fuzz_uds_request PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
+    target_link_libraries(uds_iso_tp_fuzz_uds_request PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_fuzz_uds_request PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_fuzz_uds_request_contract
+             COMMAND uds_iso_tp_fuzz_uds_request)
 endif()
 
 if(UDS_ISO_TP_BUILD_EXAMPLES)

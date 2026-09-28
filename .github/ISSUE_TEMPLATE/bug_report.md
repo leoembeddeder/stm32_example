@@ -1,39 +1,24 @@
 ---
-name: Bug report
-about: Report a reproducible firmware, build, protocol, or documentation problem
-title: "[bug] "
-labels: bug
-assignees: ""
+name: Bug Report
+about: Create a report to help us improve the library
+title: '[BUG] '
+labels: 'bug'
+assignees: ''
 ---
 
-## Summary
+**Describe the Bug**
+A clear and concise description of what the bug is.
 
-Describe the problem in one paragraph.
+**Hardware / MCU Target**
+- Target MCU (e.g., STM32F767ZI, STM32C092RC, STM32F103C8):
+- CAN Transceiver:
+- Clock Frequency:
+- Toolchain & Version:
 
-## Environment
+**Reproduction Steps**
+1. Send CAN frame `...`
+2. Expected response:
+3. Actual response / behavior:
 
-- Commit or release:
-- MCU and exact board/package:
-- Toolchain and version:
-- STM32CubeF7 revision:
-- CAN bitrate and node-ID:
-- Build personality:
-
-## Reproduction
-
-List the exact commands, CAN frames, hardware setup, or test inputs needed to reproduce the issue.
-
-## Expected behavior
-
-Describe the expected result, timing, state, or frame sequence.
-
-## Observed behavior
-
-Describe the actual result and include relevant logs, traces, assertions, or reset information. Remove credentials and private data.
-
-## Validation
-
-- [ ] I ran the deterministic host tests.
-- [ ] I ran the affected firmware personality build.
-- [ ] I attached a minimal trace or log when the issue involves CAN or timing.
-- [ ] I confirmed this is not a duplicate issue.
+**CAN Traces / Logs**
+Attach `.pcap`, logic analyzer capture, or console log if available.

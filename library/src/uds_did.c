@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <string.h>
 
-static UdsDidResult read_value(void *context, uint16_t did, uint8_t *data, uint16_t *length,
+static UdsDidResult read_value(const void *context, uint16_t did, uint8_t *data, uint16_t *length,
                                uint16_t capacity) {
     const UdsDidValue *value = (const UdsDidValue *)context;
     (void)did;
@@ -37,7 +37,8 @@ static void set_entry(UdsDidEntry *entry, uint16_t did, const UdsDidValue *value
     entry->minimum_security_level = minimum_security_level;
     entry->read = read_value;
     entry->write = NULL;
-    entry->context = (void *)value;
+    entry->context = NULL;
+    entry->context_ro = value;
 }
 
 void uds_did_registry_init(UdsDidRegistry *registry, const UdsProjectDidSource *source) {
@@ -112,7 +113,8 @@ UdsDidResult uds_did_registry_read(const UdsDidRegistry *registry, uint16_t did,
     if (security_level < entry->minimum_security_level) {
         return UDS_DID_SECURITY_DENIED;
     }
-    UdsDidResult result = entry->read(entry->context, did, data, length, capacity);
+    const void *ctx = (entry->context_ro != NULL) ? entry->context_ro : entry->context;
+    UdsDidResult result = entry->read(ctx, did, data, length, capacity);
     if ((result == UDS_DID_OK) && (*length > entry->maximum_length)) {
         return UDS_DID_RESPONSE_TOO_LONG;
     }

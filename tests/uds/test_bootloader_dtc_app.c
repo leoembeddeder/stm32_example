@@ -607,6 +607,108 @@ static void test_extended_data_and_snapshot_structures(void) {
     assert(active_count == 0U);
 }
 
+static void test_issue_65_clear_then_read_is_empty(void) {
+    uds_dtc_app_init();
+    const UdsDtcBackend *backend = uds_dtc_app_get_backend();
+    assert(backend != NULL);
+
+    /* Verify baseline active faults exist */
+    uint8_t resp[512];
+    uint16_t rlen = 0U;
+    uint8_t req_02[] = {0x19U, 0x02U, 0xFFU};
+    assert(backend->report(NULL, 0x02U, req_02, sizeof(req_02), resp, &rlen, sizeof(resp)) ==
+           UDS_RESULT_OK);
+    assert(rlen > 2U);
+
+    /* Perform 0x14 ClearDiagnosticInformation on all DTCs */
+    assert(uds_dtc_app_clear(NULL, 0xFFFFFFUL) == UDS_RESULT_OK);
+
+    /* After 0x14 clear, every list sub-function must return an empty list (2-byte header only) */
+    static const uint8_t list_subfns[] = {0x02U, 0x0BU, 0x0CU, 0x0DU, 0x0EU, 0x0FU, 0x13U, 0x15U};
+    for (size_t i = 0U; i < sizeof(list_subfns) / sizeof(list_subfns[0]); ++i) {
+        uint8_t sub = list_subfns[i];
+        uint8_t req[] = {0x19U, sub, 0xFFU};
+        rlen = 0U;
+        assert(backend->report(NULL, sub, req, sizeof(req), resp, &rlen, sizeof(resp)) ==
+               UDS_RESULT_OK);
+        assert(rlen == 2U); /* Subfunction + availability mask, 0 records */
+        assert(resp[0] == sub);
+    }
+
+    /* Count subfunctions must return count 0 */
+    static const uint8_t count_subfns[] = {0x01U, 0x07U, 0x11U, 0x12U};
+    for (size_t i = 0U; i < sizeof(count_subfns) / sizeof(count_subfns[0]); ++i) {
+        uint8_t sub = count_subfns[i];
+        uint8_t req[] = {0x19U, sub, 0xFFU};
+        rlen = 0U;
+        assert(backend->report(NULL, sub, req, sizeof(req), resp, &rlen, sizeof(resp)) ==
+               UDS_RESULT_OK);
+        assert(rlen == 5U);
+        uint16_t c = (uint16_t)(((uint16_t)resp[3] << 8U) | (uint16_t)resp[4]);
+        assert(c == 0U);
+    }
+}
+
+static void test_dtc_property_count_equals_list_items(void) {
+    uds_dtc_app_init();
+    const UdsDtcBackend *backend = uds_dtc_app_get_backend();
+    assert(backend != NULL);
+
+    /* Random sequence of operations */
+    uint32_t sample_dtcs[] = {0x010000UL, 0x020000UL, 0x030000UL, 0xD00616UL, 0xD00617UL};
+    uint8_t masks[] = {0xFFU, 0x08U, 0x01U, 0x2FU};
+
+    for (int step = 0; step < 20; ++step) {
+        /* Inject fault or report event */
+        uint32_t target = sample_dtcs[(size_t)step % (sizeof(sample_dtcs) / sizeof(sample_dtcs[0]))];
+        bool failed = (step % 3 != 0);
+        (void)uds_dtc_app_report_event(target, failed);
+
+        for (size_t m = 0U; m < sizeof(masks) / sizeof(masks[0]); ++m) {
+            uint8_t mask = masks[m];
+            uint8_t resp_cnt[32];
+            uint16_t rlen_cnt = 0U;
+            uint8_t req_cnt[] = {0x19U, 0x01U, mask};
+            assert(backend->report(NULL, 0x01U, req_cnt, sizeof(req_cnt), resp_cnt, &rlen_cnt,
+                                   sizeof(resp_cnt)) == UDS_RESULT_OK);
+            uint16_t count_val =
+                (uint16_t)(((uint16_t)resp_cnt[3] << 8U) | (uint16_t)resp_cnt[4]);
+
+            uint8_t resp_list[512];
+            uint16_t rlen_list = 0U;
+            uint8_t req_list[] = {0x19U, 0x02U, mask};
+            assert(backend->report(NULL, 0x02U, req_list, sizeof(req_list), resp_list, &rlen_list,
+                                   sizeof(resp_list)) == UDS_RESULT_OK);
+            assert(rlen_list >= 2U);
+            uint16_t items_in_list = (uint16_t)((rlen_list - 2U) / 4U);
+
+            /* Invariant: count reported by 0x01 MUST exactly match items in 0x02 list */
+            assert(count_val == items_in_list);
+        }
+    }
+}
+
+static void test_nvm_version_rejection(void) {
+    (void)mock_flash_erase(0U);
+    UdsParamStore nvm;
+    assert(uds_param_init(&nvm, &s_mock_flash_port, 0U, MOCK_FLASH_SECTOR_COUNT,
+                          (uint16_t)sizeof(UdsDtcNvBlock)) == UDS_PARAM_OK);
+
+    /* Write an NVM block with invalid magic */
+    UdsDtcNvBlock corrupt_block;
+    memset(&corrupt_block, 0, sizeof(corrupt_block));
+    corrupt_block.magic = 0xBADD;
+    corrupt_block.version = 99U;
+    corrupt_block.record_count = 5U;
+    assert(uds_param_save(&nvm, &corrupt_block) == UDS_PARAM_OK);
+
+    /* Attempt to load into DTC app */
+    uds_dtc_app_init();
+    uds_dtc_app_attach_nvm(&nvm);
+    /* Loading should be rejected due to magic / version mismatch */
+    assert(!uds_dtc_app_load_from_nvm());
+}
+
 int main(void) {
     test_dtc_app_all_subfunctions();
     test_iso14229_19_04_conformance();
@@ -614,5 +716,8 @@ int main(void) {
     test_dtc_wear_leveling_nvm();
     test_bootloader_flow();
     test_extended_data_and_snapshot_structures();
+    test_issue_65_clear_then_read_is_empty();
+    test_dtc_property_count_equals_list_items();
+    test_nvm_version_rejection();
     return 0;
 }

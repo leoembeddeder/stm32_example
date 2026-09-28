@@ -2,32 +2,61 @@
 
 All notable changes to this project are documented here. Host validation and target compatibility remain dependent on the exact compiler, MCU, HAL revision, transceiver, and board configuration.
 
-## [Unreleased]
+## [1.6.0] - 2026-09-28
 
-### Standalone architecture
+### Added
+- **Standard MCU Porting Architecture (`ports/`)**:
+  - Defined 4 normalized hardware interfaces: `can_port.h`, `flash_port.h`, `clock_port.h`, and `reset_port.h`.
+  - Added port implementations for STM32F7, STM32C0, STM32F1 (answering #71-#89), STM32F4, and STM32G4.
+  - Published comprehensive [MCU Porting Guide](docs/porting_guide.md).
+- **Pluggable Boot Integrity Policy (`BootIntegrityPolicy`, Fixes #68)**:
+  - Modular image verification policies: `policy_crc32`, `policy_sha256`, and `policy_signature` (ECDSA/Ed25519).
+- **Freestanding Cryptography Module (`library/crypto/sha256.h`)**:
+  - Pure C99/C11 freestanding SHA-256 and HMAC-SHA256 validated against NIST CAVP and RFC 4231 vectors.
+- **Security Attempt & Lockout Gate (`uds_security_gate.h`)**:
+  - Independent security gate enforcing attempt thresholds, power-on delays, and seed reuse protection.
+- **Non-Blocking Flash Range Erase & FSM Servicing**:
+  - Sliced range erase (`Flash_RequestRangeErase`) enabling continuous UDS / ISO-TP flow control processing during 128 KiB flash erase cycles without timeout starvation.
+- **Continuous Fuzzing Targets**:
+  - libFuzzer test engines: `fuzz_isotp_rx` (CAN frames and PCI injection) and `fuzz_uds_request` (diagnostic request parser).
+- **Process, Quality & CI Gates**:
+  - Coverage gates: `--fail-under-line 90 --fail-under-branch 80`.
+  - Cyclomatic complexity gate: `lizard -C 15` across `library/`.
+  - MISRA C:2012 deviation record ([docs/misra_deviations.md](docs/misra_deviations.md)).
+  - Requirements traceability matrix ([docs/iso_traceability.md](docs/iso_traceability.md)).
+  - Hardware physical validation board profile ([docs/physical_validation/board_profile.yaml](docs/physical_validation/board_profile.yaml)).
+  - GitHub issue templates for bug reports, feature requests, and porting support.
 
-- Completed the migration to an independent ISO 15765-2 ISO-TP and ISO 14229 UDS repository.
-- Removed the unrelated inherited protocol stack, profile artifacts, object-dictionary files, gateway tooling, and associated build and test dependencies.
-- Added a minimal STM32F767 bxCAN application with explicit diagnostic identifiers, deferred RX processing, injected timing, and application-owned UDS callbacks.
-- Retained only STM32F7 HAL/CMSIS material needed for the target build and documented its upstream licensing requirements.
+### Changed
+- **Cyclomatic Complexity Reduction (CCN <= 15)**:
+  - `uds_bootloader.c`: Monolithic routine control (CCN 39 -> 8) refactored into table dispatch `k_boot_routines`.
+  - `uds_bootloader.c`: Application validation (CCN 16 -> 5) and flash programming refactored into modular helpers.
+  - `uds_bootloader.c`: Hardware assembly vector jump isolated into `boot_jump.c`.
+  - `uds.c`: Service dispatcher (CCN 44 -> 13) refactored to static table dispatch `k_service_dispatch_table`.
+  - `uds.c`: Security access (CCN 24 -> 9) split into seed and key handlers.
+  - `isotp.c`: Receive handler (CCN 32 -> 13) modularized into `rx_single`, `rx_first`, and `rx_consecutive`.
+  - `uds_dtc_app.c`: Report switch (CCN 201 -> 13) refactored to table dispatch `k_dtc_subfns`.
+- **Flash Programming Granularity (Fixes #91)**:
+  - `UdsFlashPort` explicitly exposes `program_granule` (2, 4, 8, 16, 32 bytes) and `erased_byte`.
+  - Wear-leveling metadata slots dynamically compute granule alignment with two-phase commit.
+- **Single Source of Truth for DTC State & Versioning**:
+  - Added `UDS_DTC_NV_MAGIC` (`0xD7C1U`) and `UDS_DTC_NV_VERSION` (`1U`) to NVM storage.
+  - Unified DTC record mutations through atomic state management.
+- **Cortex-M7 Concurrency Synchronization**:
+  - Added Data Memory Barriers (`__DMB()`) around SPSC RX FIFO head/tail publications.
+- **Release Versioning**:
+  - Expose runtime version API `uds_iso_tp_version()` configured from root `VERSION` file.
 
-### ISO-TP and UDS validation
-
-- Added explicit ISO-TP transmit states with CTS, bounded WAIT, immediate OVERFLOW abort, BS/STmin validation, reserved-STmin rejection, CAN-ID and DLC validation, timeout handling, and consecutive-frame sequence checks.
-- Covered Classical CAN and CAN-FD profiles, including valid 64-byte data lengths, Single-Frame escape behavior, and extended First-Frame payloads above 4,095 bytes.
-- Added strict CMake/CTest, sanitizer, gcovr coverage, clang-format, clang-tidy, cppcheck, architecture, adapter-contract, and safety-gated HIL dry-run checks.
-- Kept production SecurityAccess, Flash activation, authenticated boot, and physical CAN-FD HIL as explicit product-owned evidence gates.
+### Fixed
+- Fixed DID entry `const void *context_ro` preservation to prevent accidental writes through read-only context (`uds_did.c:40`).
+- Added negative test verifying write (service 0x2E) to read-only DID returns NRC 0x31 (RequestOutOfRange).
+- Added regression test `test_issue_65_clear_then_read_is_empty` verifying ClearDiagnosticInformation empties all subfunction lists.
+- Fixed off-by-one and truncated request negative handling for multi-byte diagnostic lengths.
 
 ## [0.1.0] - 2026-08-15
 
 ### Added
-
 - Bounded heap-free ISO-TP and UDS core APIs for Classical CAN and CAN FD.
 - STM32F767 bxCAN and FDCAN-capable STM32 adapter contracts.
 - Host tests, sanitizer validation, static analysis, HIL inventory tooling, and target build infrastructure.
 - Documentation for architecture, transport profiles, UDS boundaries, STM32 integration, HIL, safety, and release readiness.
-
-### Notes
-
-- The repository is an engineering baseline, not a production-board certification or a formal ISO 15765-2 / ISO 14229 conformance claim.
-- Physical electrical validation, timing evidence, EMC testing, production cryptography, Flash power-loss testing, and authenticated firmware activation require a board-specific validation program.

@@ -5,142 +5,67 @@
 
 #include <stddef.h>
 
-bool uds_dtc_subfunction_supported(uint8_t subfunction) {
-    switch (subfunction) {
-    case 0x01U:
-    case 0x02U:
-    case 0x03U:
-    case 0x04U:
-    case 0x05U:
-    case 0x06U:
-    case 0x07U:
-    case 0x08U:
-    case 0x09U:
-    case 0x0AU:
-    case 0x0BU:
-    case 0x0CU:
-    case 0x0DU:
-    case 0x0EU:
-    case 0x0FU:
-    case 0x10U:
-    case 0x11U:
-    case 0x12U:
-    case 0x13U:
-    case 0x14U:
-    case 0x15U:
-    case 0x16U:
-    case 0x17U:
-    case 0x18U:
-    case 0x19U:
-    case 0x42U:
-    case 0x55U:
-        return true;
-    default:
-        return false;
+typedef struct {
+    uint8_t subfunction;
+    uint8_t min_len;
+    uint8_t max_len;
+    uint32_t capability;
+} UdsDtcSubfnMeta;
+
+static const UdsDtcSubfnMeta k_dtc_subfn_table[] = {
+    { 0x01U, 3U, 3U, UDS_DTC_CAP_REPORT_NUMBER_BY_STATUS },
+    { 0x02U, 3U, 3U, UDS_DTC_CAP_REPORT_BY_STATUS_MASK },
+    { 0x03U, 2U, 2U, UDS_DTC_CAP_REPORT_SNAPSHOT_IDENTIFICATION },
+    { 0x04U, 5U, 6U, UDS_DTC_CAP_REPORT_SNAPSHOT_RECORDS },
+    { 0x05U, 3U, 3U, UDS_DTC_CAP_REPORT_MIRROR_MEMORY },
+    { 0x06U, 5U, 6U, UDS_DTC_CAP_REPORT_EXTENDED_DATA },
+    { 0x07U, 3U, 4U, UDS_DTC_CAP_REPORT_NUMBER_BY_SEVERITY },
+    { 0x08U, 3U, 4U, UDS_DTC_CAP_REPORT_BY_SEVERITY },
+    { 0x09U, 5U, 5U, UDS_DTC_CAP_REPORT_SEVERITY_INFORMATION },
+    { 0x0AU, 2U, 3U, UDS_DTC_CAP_REPORT_SUPPORTED_DTC },
+    { 0x0BU, 2U, 2U, UDS_DTC_CAP_REPORT_FIRST_FAILED },
+    { 0x0CU, 2U, 2U, UDS_DTC_CAP_REPORT_FIRST_CONFIRMED },
+    { 0x0DU, 2U, 2U, UDS_DTC_CAP_REPORT_MOST_RECENT_FAILED },
+    { 0x0EU, 2U, 2U, UDS_DTC_CAP_REPORT_MOST_RECENT_CONFIRMED },
+    { 0x0FU, 3U, 3U, UDS_DTC_CAP_REPORT_MIRROR_EXTENDED_DATA },
+    { 0x10U, 5U, 6U, UDS_DTC_CAP_REPORT_MIRROR_EXTENDED_DATA },
+    { 0x11U, 3U, 3U, UDS_DTC_CAP_REPORT_NUMBER_BY_SEVERITY_MASK },
+    { 0x12U, 3U, 3U, UDS_DTC_CAP_REPORT_BY_SEVERITY_MASK },
+    { 0x13U, 3U, 3U, UDS_DTC_CAP_REPORT_USER_MEMORY },
+    { 0x14U, 2U, 2U, UDS_DTC_CAP_REPORT_USER_MEMORY_EXTENDED_DATA },
+    { 0x15U, 2U, 3U, UDS_DTC_CAP_REPORT_PERMANENT_STATUS },
+    { 0x16U, 3U, 3U, UDS_DTC_CAP_REPORT_PERMANENT_STATUS_MASK },
+    { 0x17U, 3U, 4U, UDS_DTC_CAP_REPORT_WWHOBD_STATUS },
+    { 0x18U, 6U, 7U, UDS_DTC_CAP_REPORT_WWHOBD_STATUS_MASK },
+    { 0x19U, 6U, 7U, UDS_DTC_CAP_REPORT_BY_SEVERITY_RECORDS },
+    { 0x42U, 5U, 5U, UDS_DTC_CAP_CUSTOM_42 },
+    { 0x55U, 2U, 3U, UDS_DTC_CAP_CUSTOM_55 },
+};
+
+static const UdsDtcSubfnMeta *uds_dtc_find_meta(uint8_t subfunction) {
+    for (size_t i = 0U; i < (sizeof(k_dtc_subfn_table) / sizeof(k_dtc_subfn_table[0])); ++i) {
+        if (k_dtc_subfn_table[i].subfunction == subfunction) {
+            return &k_dtc_subfn_table[i];
+        }
     }
+    return NULL;
+}
+
+bool uds_dtc_subfunction_supported(uint8_t subfunction) {
+    return uds_dtc_find_meta(subfunction) != NULL;
 }
 
 bool uds_dtc_request_length_valid(uint8_t subfunction, uint16_t request_length) {
-    if (!uds_dtc_subfunction_supported(subfunction))
-        return false;
-    switch (subfunction) {
-    case 0x01U:
-    case 0x02U:
-    case 0x05U:
-    case 0x0FU:
-    case 0x11U:
-    case 0x12U:
-    case 0x13U:
-    case 0x16U:
-        return request_length == 3U;
-    case 0x03U:
-    case 0x0BU:
-    case 0x0CU:
-    case 0x0DU:
-    case 0x0EU:
-    case 0x14U:
-        return request_length == 2U;
-    case 0x0AU:
-    case 0x15U:
-    case 0x55U:
-        return (request_length == 2U) || (request_length == 3U);
-    case 0x07U:
-    case 0x08U:
-    case 0x17U:
-        return (request_length == 3U) || (request_length == 4U);
-    case 0x09U:
-    case 0x42U:
-        return request_length == 5U;
-    case 0x04U:
-    case 0x06U:
-    case 0x10U:
-        return (request_length == 5U) || (request_length == 6U);
-    case 0x18U:
-    case 0x19U:
-        return (request_length == 6U) || (request_length == 7U);
-    default:
+    const UdsDtcSubfnMeta *meta = uds_dtc_find_meta(subfunction);
+    if (meta == NULL) {
         return false;
     }
+    return (request_length >= (uint16_t)meta->min_len) && (request_length <= (uint16_t)meta->max_len);
 }
 
 uint32_t uds_dtc_capability_for_subfunction(uint8_t subfunction) {
-    switch (subfunction) {
-    case 0x01U:
-        return UDS_DTC_CAP_REPORT_NUMBER_BY_STATUS;
-    case 0x02U:
-        return UDS_DTC_CAP_REPORT_BY_STATUS_MASK;
-    case 0x03U:
-        return UDS_DTC_CAP_REPORT_SNAPSHOT_IDENTIFICATION;
-    case 0x04U:
-        return UDS_DTC_CAP_REPORT_SNAPSHOT_RECORDS;
-    case 0x05U:
-        return UDS_DTC_CAP_REPORT_MIRROR_MEMORY;
-    case 0x06U:
-        return UDS_DTC_CAP_REPORT_EXTENDED_DATA;
-    case 0x07U:
-        return UDS_DTC_CAP_REPORT_NUMBER_BY_SEVERITY;
-    case 0x08U:
-        return UDS_DTC_CAP_REPORT_BY_SEVERITY;
-    case 0x09U:
-        return UDS_DTC_CAP_REPORT_SEVERITY_INFORMATION;
-    case 0x0AU:
-        return UDS_DTC_CAP_REPORT_SUPPORTED_DTC;
-    case 0x0BU:
-        return UDS_DTC_CAP_REPORT_FIRST_FAILED;
-    case 0x0CU:
-        return UDS_DTC_CAP_REPORT_FIRST_CONFIRMED;
-    case 0x0DU:
-        return UDS_DTC_CAP_REPORT_MOST_RECENT_FAILED;
-    case 0x0EU:
-        return UDS_DTC_CAP_REPORT_MOST_RECENT_CONFIRMED;
-    case 0x0FU:
-    case 0x10U:
-        return UDS_DTC_CAP_REPORT_MIRROR_EXTENDED_DATA;
-    case 0x11U:
-        return UDS_DTC_CAP_REPORT_NUMBER_BY_SEVERITY_MASK;
-    case 0x12U:
-        return UDS_DTC_CAP_REPORT_BY_SEVERITY_MASK;
-    case 0x13U:
-        return UDS_DTC_CAP_REPORT_USER_MEMORY;
-    case 0x14U:
-        return UDS_DTC_CAP_REPORT_USER_MEMORY_EXTENDED_DATA;
-    case 0x15U:
-        return UDS_DTC_CAP_REPORT_PERMANENT_STATUS;
-    case 0x16U:
-        return UDS_DTC_CAP_REPORT_PERMANENT_STATUS_MASK;
-    case 0x17U:
-        return UDS_DTC_CAP_REPORT_WWHOBD_STATUS;
-    case 0x18U:
-        return UDS_DTC_CAP_REPORT_WWHOBD_STATUS_MASK;
-    case 0x19U:
-        return UDS_DTC_CAP_REPORT_BY_SEVERITY_RECORDS;
-    case 0x42U:
-        return UDS_DTC_CAP_CUSTOM_42;
-    case 0x55U:
-        return UDS_DTC_CAP_CUSTOM_55;
-    default:
-        return 0U;
-    }
+    const UdsDtcSubfnMeta *meta = uds_dtc_find_meta(subfunction);
+    return (meta != NULL) ? meta->capability : 0U;
 }
 
 bool uds_dtc_backend_supports(const UdsDtcBackend *backend, uint8_t subfunction) {

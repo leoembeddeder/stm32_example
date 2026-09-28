@@ -67,5 +67,6 @@ IsoTpStatus uds_isotp_endpoint_process(UdsIsoTpEndpoint *endpoint, uint32_t now_
 IsoTpStatus uds_isotp_endpoint_tick(UdsIsoTpEndpoint *endpoint, uint32_t now_ms);
 void uds_isotp_endpoint_tx_complete(UdsIsoTpEndpoint *endpoint);
 UdsServer *uds_isotp_endpoint_server(UdsIsoTpEndpoint *endpoint);
+const char *uds_iso_tp_version(void);
 
 #endif

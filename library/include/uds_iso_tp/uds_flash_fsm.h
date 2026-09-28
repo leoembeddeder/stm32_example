@@ -58,6 +58,10 @@ typedef struct {
     uint32_t cur_addr;
     uint32_t written_size;
     uint32_t erase_addr;
+    uint32_t range_erase_start;
+    uint32_t range_erase_end;
+    uint32_t range_erase_cur;
+    uint32_t range_erase_sector_size;
     FlashIf_WriteFn write_fn;
     FlashIf_EraseFn erase_fn;
 } FlashContext_t;
@@ -107,6 +111,16 @@ void Flash_SetWriteInfo(uint32_t memory_addr, uint32_t memory_size);
  * @retval false Rejected (busy).
  */
 bool Flash_RequestErase(uint32_t addr);
+
+/**
+ * @brief Submits a multi-sector/page range erase request to the FSM.
+ * @param start_addr Start address in flash.
+ * @param length Total size to erase in bytes.
+ * @param sector_size Granularity/size of each page/sector erased per FSM step.
+ * @retval true Request accepted (state transitioned to FLASH_STATE_ERASE).
+ * @retval false Rejected (busy, invalid length, or invalid sector_size).
+ */
+bool Flash_RequestRangeErase(uint32_t start_addr, uint32_t length, uint32_t sector_size);
 
 /**
  * @brief Returns the current FSM operational state.

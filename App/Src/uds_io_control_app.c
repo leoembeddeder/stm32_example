@@ -84,100 +84,115 @@ static UdsCallbackResult handle_air_inlet_door(const uint8_t *parameter, uint16_
     return UDS_RESULT_OK;
 }
 
+static UdsCallbackResult handle_egr_iac_return_control(const uint8_t *parameter, uint16_t parameter_len) {
+    if (parameter_len == 1U) {
+        s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
+        s_egr_under_control = false;
+        s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
+        s_iac_under_control = false;
+        s_egr_iac_frozen = false;
+        return UDS_RESULT_OK;
+    }
+    if (parameter_len == 3U) {
+        if ((parameter[1] & UDS_IO_MASK_EGR_ENABLE) != 0U) {
+            s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
+            s_egr_under_control = false;
+        }
+        if ((parameter[2] & UDS_IO_MASK_IAC_ENABLE) != 0U) {
+            s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
+            s_iac_under_control = false;
+        }
+        s_egr_iac_frozen = false;
+        return UDS_RESULT_OK;
+    }
+    return UDS_RESULT_INVALID_FORMAT;
+}
+
+static UdsCallbackResult handle_egr_iac_reset_default(const uint8_t *parameter, uint16_t parameter_len) {
+    if (parameter_len == 1U) {
+        s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
+        s_egr_under_control = true;
+        s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
+        s_iac_under_control = true;
+        s_egr_iac_frozen = false;
+        return UDS_RESULT_OK;
+    }
+    if (parameter_len == 3U) {
+        if ((parameter[1] & UDS_IO_MASK_EGR_ENABLE) != 0U) {
+            s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
+            s_egr_under_control = true;
+        }
+        if ((parameter[2] & UDS_IO_MASK_IAC_ENABLE) != 0U) {
+            s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
+            s_iac_under_control = true;
+        }
+        s_egr_iac_frozen = false;
+        return UDS_RESULT_OK;
+    }
+    return UDS_RESULT_INVALID_FORMAT;
+}
+
+static UdsCallbackResult handle_egr_iac_short_term(const uint8_t *parameter, uint16_t parameter_len) {
+    if (parameter_len == 3U) {
+        if (parameter[1] > 100U) {
+            return UDS_RESULT_OUT_OF_RANGE;
+        }
+        s_egr_duty = parameter[1];
+        s_egr_under_control = true;
+        s_iac_steps = parameter[2];
+        s_iac_under_control = true;
+        s_egr_iac_frozen = false;
+        return UDS_RESULT_OK;
+    }
+    if (parameter_len == 5U) {
+        uint8_t mask_egr = parameter[3];
+        uint8_t mask_iac = parameter[4];
+        if ((mask_egr & UDS_IO_MASK_EGR_ENABLE) != 0U) {
+            if (parameter[1] > 100U) {
+                return UDS_RESULT_OUT_OF_RANGE;
+            }
+            s_egr_duty = parameter[1];
+            s_egr_under_control = true;
+        }
+        if ((mask_iac & UDS_IO_MASK_IAC_ENABLE) != 0U) {
+            s_iac_steps = parameter[2];
+            s_iac_under_control = true;
+        }
+        s_egr_iac_frozen = false;
+        return UDS_RESULT_OK;
+    }
+    return UDS_RESULT_INVALID_FORMAT;
+}
+
 static UdsCallbackResult handle_egr_iac(const uint8_t *parameter, uint16_t parameter_len,
                                         uint8_t *response, uint16_t *response_len,
                                         uint16_t capacity) {
     uint8_t control_param = parameter[0];
+    UdsCallbackResult res = UDS_RESULT_OK;
 
     switch (control_param) {
     case UDS_IOCP_RETURN_CONTROL_TO_ECU:
-        if (parameter_len == 1U) {
-            s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
-            s_egr_under_control = false;
-            s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
-            s_iac_under_control = false;
-            s_egr_iac_frozen = false;
-        } else if (parameter_len == 3U) {
-            /* With mask record */
-            if ((parameter[1] & UDS_IO_MASK_EGR_ENABLE) != 0U) {
-                s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
-                s_egr_under_control = false;
-            }
-            if ((parameter[2] & UDS_IO_MASK_IAC_ENABLE) != 0U) {
-                s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
-                s_iac_under_control = false;
-            }
-            s_egr_iac_frozen = false;
-        } else {
-            return UDS_RESULT_INVALID_FORMAT;
-        }
+        res = handle_egr_iac_return_control(parameter, parameter_len);
         break;
-
     case UDS_IOCP_RESET_TO_DEFAULT:
-        if (parameter_len == 1U) {
-            s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
-            s_egr_under_control = true;
-            s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
-            s_iac_under_control = true;
-            s_egr_iac_frozen = false;
-        } else if (parameter_len == 3U) {
-            if ((parameter[1] & UDS_IO_MASK_EGR_ENABLE) != 0U) {
-                s_egr_duty = UDS_IO_EGR_DEFAULT_DUTY;
-                s_egr_under_control = true;
-            }
-            if ((parameter[2] & UDS_IO_MASK_IAC_ENABLE) != 0U) {
-                s_iac_steps = UDS_IO_IAC_DEFAULT_STEPS;
-                s_iac_under_control = true;
-            }
-            s_egr_iac_frozen = false;
-        } else {
-            return UDS_RESULT_INVALID_FORMAT;
-        }
+        res = handle_egr_iac_reset_default(parameter, parameter_len);
         break;
-
     case UDS_IOCP_FREEZE_CURRENT_STATE:
         if ((parameter_len != 1U) && (parameter_len != 3U)) {
             return UDS_RESULT_INVALID_FORMAT;
         }
         s_egr_iac_frozen = true;
         break;
-
     case UDS_IOCP_SHORT_TERM_ADJUSTMENT:
-        if (parameter_len == 3U) {
-            /* No mask: parameter[1] = EGR, parameter[2] = IAC */
-            if (parameter[1] > 100U) {
-                return UDS_RESULT_OUT_OF_RANGE;
-            }
-            s_egr_duty = parameter[1];
-            s_egr_under_control = true;
-            s_iac_steps = parameter[2];
-            s_iac_under_control = true;
-            s_egr_iac_frozen = false;
-        } else if (parameter_len == 5U) {
-            /* With mask: parameter[1] = EGR, parameter[2] = IAC, parameter[3] = mask_egr, parameter[4] = mask_iac */
-            uint8_t mask_egr = parameter[3];
-            uint8_t mask_iac = parameter[4];
-            if ((mask_egr & UDS_IO_MASK_EGR_ENABLE) != 0U) {
-                if (parameter[1] > 100U) {
-                    return UDS_RESULT_OUT_OF_RANGE;
-                }
-                s_egr_duty = parameter[1];
-                s_egr_under_control = true;
-            }
-            if ((mask_iac & UDS_IO_MASK_IAC_ENABLE) != 0U) {
-                s_iac_steps = parameter[2];
-                s_iac_under_control = true;
-            }
-            s_egr_iac_frozen = false;
-        } else {
-            return UDS_RESULT_INVALID_FORMAT;
-        }
+        res = handle_egr_iac_short_term(parameter, parameter_len);
         break;
-
     default:
         return UDS_RESULT_SUBFUNCTION_NOT_SUPPORTED;
     }
 
+    if (res != UDS_RESULT_OK) {
+        return res;
+    }
     if (capacity < 3U) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
     }

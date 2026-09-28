@@ -56,6 +56,28 @@ bool Flash_RequestErase(uint32_t addr) {
     }
 
     s_flash_ctx.erase_addr = addr;
+    s_flash_ctx.range_erase_start = addr;
+    s_flash_ctx.range_erase_end = addr + 1U;
+    s_flash_ctx.range_erase_cur = addr;
+    s_flash_ctx.range_erase_sector_size = 1U;
+    s_flash_ctx.state = FLASH_STATE_ERASE;
+    return true;
+}
+
+bool Flash_RequestRangeErase(uint32_t start_addr, uint32_t length, uint32_t sector_size) {
+    if ((length == 0U) || (sector_size == 0U)) {
+        return false;
+    }
+    if ((s_flash_ctx.state != FLASH_STATE_IDLE) && (s_flash_ctx.state != FLASH_STATE_ERASE_DONE) &&
+        (s_flash_ctx.state != FLASH_STATE_WRITE_DONE)) {
+        return false;
+    }
+
+    s_flash_ctx.erase_addr = start_addr;
+    s_flash_ctx.range_erase_start = start_addr;
+    s_flash_ctx.range_erase_end = start_addr + length;
+    s_flash_ctx.range_erase_cur = start_addr;
+    s_flash_ctx.range_erase_sector_size = sector_size;
     s_flash_ctx.state = FLASH_STATE_ERASE;
     return true;
 }
@@ -101,12 +123,15 @@ void Flash_MainFunction(void) {
     case FLASH_STATE_ERASE: {
         bool ok = true;
         if (s_flash_ctx.erase_fn != NULL) {
-            ok = s_flash_ctx.erase_fn(s_flash_ctx.erase_addr);
+            ok = s_flash_ctx.erase_fn(s_flash_ctx.range_erase_cur);
         }
-        if (ok) {
-            s_flash_ctx.state = FLASH_STATE_ERASE_DONE;
-        } else {
+        if (!ok) {
             s_flash_ctx.state = FLASH_STATE_ERASE_FAIL;
+        } else {
+            s_flash_ctx.range_erase_cur += s_flash_ctx.range_erase_sector_size;
+            if (s_flash_ctx.range_erase_cur >= s_flash_ctx.range_erase_end) {
+                s_flash_ctx.state = FLASH_STATE_ERASE_DONE;
+            }
         }
         break;
     }

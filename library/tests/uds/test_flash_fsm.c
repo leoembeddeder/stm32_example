@@ -36,6 +36,77 @@ static bool mock_erase(uint32_t addr) {
     return true;
 }
 
+#include "uds_iso_tp/uds.h"
+
+#define RANGE_ERASE_TOTAL_SIZE 131072U
+#define RANGE_ERASE_SECTOR_SIZE 8192U
+static uint8_t s_128k_mem[RANGE_ERASE_TOTAL_SIZE];
+static uint32_t s_sector_erase_count = 0U;
+
+static bool mock_range_erase_sector(uint32_t addr) {
+    if ((addr < 0x08020000U) || (addr >= (0x08020000U + RANGE_ERASE_TOTAL_SIZE))) {
+        return false;
+    }
+    uint32_t offset = addr - 0x08020000U;
+    (void)memset(&s_128k_mem[offset], 0xFF, RANGE_ERASE_SECTOR_SIZE);
+    s_sector_erase_count++;
+    return true;
+}
+
+static void test_128kib_range_erase_interleaved_uds_service(void) {
+    (void)memset(s_128k_mem, 0xAA, sizeof(s_128k_mem));
+    s_sector_erase_count = 0U;
+
+    Flash_Init();
+    Flash_SetHardwareInterface(mock_write, mock_range_erase_sector);
+
+    /* Setup UDS server */
+    UdsServer server;
+    UdsCallbacks callbacks;
+    (void)memset(&callbacks, 0, sizeof(callbacks));
+    uds_server_init(&server, &callbacks, NULL, 0U);
+
+    /* Request 128 KiB range erase sliced into 16 sectors of 8 KiB */
+    assert(Flash_RequestRangeErase(0x08020000U, RANGE_ERASE_TOTAL_SIZE, RANGE_ERASE_SECTOR_SIZE));
+    assert(Flash_IsBusy());
+    assert(Flash_GetState() == FLASH_STATE_ERASE);
+
+    uint32_t service_ticks = 0U;
+    uint32_t successful_uds_responses = 0U;
+
+    while (Flash_IsBusy()) {
+        /* Run one non-blocking erase slice */
+        Flash_MainFunction();
+        service_ticks++;
+
+        /* Interleaved: simulate UDS server servicing ISO-TP flow control and requests */
+        (void)uds_server_tick(&server, service_ticks * 10U);
+
+        /* Send TesterPresent (0x3E 0x00) request during erase flight */
+        const uint8_t tp_req[2] = { 0x3E, 0x00 };
+        uint8_t resp_buf[16];
+        uint16_t resp_len = 0U;
+        UdsCallbackResult res = uds_server_handle(&server, tp_req, (uint16_t)sizeof(tp_req),
+                                                 resp_buf, &resp_len, (uint16_t)sizeof(resp_buf),
+                                                 service_ticks * 10U);
+        if ((res == UDS_RESULT_OK) && (resp_len == 2U) &&
+            (resp_buf[0] == 0x7EU) && (resp_buf[1] == 0x00U)) {
+            successful_uds_responses++;
+        }
+    }
+
+    assert(Flash_GetState() == FLASH_STATE_ERASE_DONE);
+    assert(!Flash_IsBusy());
+    assert(service_ticks == 16U);
+    assert(s_sector_erase_count == 16U);
+    assert(successful_uds_responses == 16U);
+
+    /* Verify all 128 KiB memory was erased to 0xFF */
+    for (size_t i = 0U; i < RANGE_ERASE_TOTAL_SIZE; ++i) {
+        assert(s_128k_mem[i] == 0xFFU);
+    }
+}
+
 int main(void) {
     (void)memset(s_mock_mem, 0, sizeof(s_mock_mem));
 
@@ -98,6 +169,9 @@ int main(void) {
     /* 6. Test context clear */
     Flash_ContextClear();
     assert(Flash_GetState() == FLASH_STATE_IDLE);
+
+    /* 7. Test 128 KiB range erase with interleaved UDS server servicing */
+    test_128kib_range_erase_interleaved_uds_service();
 
     return 0;
 }

@@ -35,6 +35,79 @@ const UdsAuthenticationServiceBackend *uds_auth_app_get_backend(void) {
     return &s_auth_backend;
 }
 
+static UdsCallbackResult handle_auth_deauth(uint8_t subfunction, uint8_t *response,
+                                             uint16_t *response_length, uint16_t response_capacity) {
+    uds_auth_app_deauthenticate();
+    if (response_capacity < 3U) {
+        return UDS_RESULT_RESPONSE_TOO_LONG;
+    }
+    response[0] = 0x69U;
+    response[1] = subfunction;
+    response[2] = 0x00U; /* Success status */
+    *response_length = 3U;
+    return UDS_RESULT_OK;
+}
+
+static UdsCallbackResult handle_auth_challenge(uint8_t subfunction, uint8_t *response,
+                                               uint16_t *response_length, uint16_t response_capacity) {
+    if (response_capacity < (2U + UDS_AUTH_CHALLENGE_SIZE)) {
+        return UDS_RESULT_RESPONSE_TOO_LONG;
+    }
+    for (uint8_t i = 0U; i < UDS_AUTH_CHALLENGE_SIZE; ++i) {
+        s_active_challenge[i] = (uint8_t)(s_active_challenge[i] + (uint8_t)(i * 7U + 0x13U));
+    }
+    s_challenge_valid = true;
+
+    response[0] = 0x69U;
+    response[1] = subfunction;
+    (void)memcpy(&response[2], s_active_challenge, UDS_AUTH_CHALLENGE_SIZE);
+    *response_length = (uint16_t)(2U + UDS_AUTH_CHALLENGE_SIZE);
+    return UDS_RESULT_OK;
+}
+
+static UdsCallbackResult handle_auth_verify_proof(uint8_t subfunction, const uint8_t *request,
+                                                  uint16_t request_length, uint8_t *response,
+                                                  uint16_t *response_length, uint16_t response_capacity) {
+    if ((request_length < (2U + UDS_AUTH_CHALLENGE_SIZE)) || !s_challenge_valid) {
+        return UDS_RESULT_SEQUENCE_ERROR;
+    }
+
+    uint8_t expected_mac[16];
+    if (!uds_security_cmac_derive_key(s_auth_master_key, s_active_challenge, expected_mac)) {
+        return UDS_RESULT_ERROR;
+    }
+
+    if (!uds_security_cmac_constant_time_equal(&request[2], expected_mac)) {
+        s_is_authenticated = false;
+        return UDS_RESULT_INVALID_KEY;
+    }
+
+    s_is_authenticated = true;
+    s_challenge_valid = false;
+
+    if (response_capacity < 3U) {
+        return UDS_RESULT_RESPONSE_TOO_LONG;
+    }
+    response[0] = 0x69U;
+    response[1] = subfunction;
+    response[2] = 0x00U; /* Proof accepted */
+    *response_length = 3U;
+    return UDS_RESULT_OK;
+}
+
+static UdsCallbackResult handle_auth_config(uint8_t subfunction, uint8_t *response,
+                                            uint16_t *response_length, uint16_t response_capacity) {
+    if (response_capacity < 4U) {
+        return UDS_RESULT_RESPONSE_TOO_LONG;
+    }
+    response[0] = 0x69U;
+    response[1] = subfunction;
+    response[2] = 0x01U; /* APCE Mode */
+    response[3] = 0x01U; /* AES-CMAC-128 */
+    *response_length = 4U;
+    return UDS_RESULT_OK;
+}
+
 UdsCallbackResult uds_auth_app_service_handler(void *context, const uint8_t *request,
                                                uint16_t request_length, uint8_t *response,
                                                uint16_t *response_length,
@@ -48,78 +121,15 @@ UdsCallbackResult uds_auth_app_service_handler(void *context, const uint8_t *req
     uint8_t subfunction = (uint8_t)(request[1] & 0x7FU);
 
     switch (subfunction) {
-    case UDS_AUTH_SUBFUNCTION_DEAUTHENTICATE: {
-        uds_auth_app_deauthenticate();
-        if (response_capacity < 3U) {
-            return UDS_RESULT_RESPONSE_TOO_LONG;
-        }
-        response[0] = 0x69U;
-        response[1] = subfunction;
-        response[2] = 0x00U; /* Success status */
-        *response_length = 3U;
-        return UDS_RESULT_OK;
-    }
-
-    case UDS_AUTH_SUBFUNCTION_REQUEST_CHALLENGE: {
-        /* Request format: 29 05 [communicationConfiguration (optional 1 byte)] */
-        if (response_capacity < (2U + UDS_AUTH_CHALLENGE_SIZE)) {
-            return UDS_RESULT_RESPONSE_TOO_LONG;
-        }
-        /* Generate deterministic rolling pseudo-random challenge */
-        for (uint8_t i = 0U; i < UDS_AUTH_CHALLENGE_SIZE; ++i) {
-            s_active_challenge[i] = (uint8_t)(s_active_challenge[i] + (uint8_t)(i * 7U + 0x13U));
-        }
-        s_challenge_valid = true;
-
-        response[0] = 0x69U;
-        response[1] = subfunction;
-        (void)memcpy(&response[2], s_active_challenge, UDS_AUTH_CHALLENGE_SIZE);
-        *response_length = (uint16_t)(2U + UDS_AUTH_CHALLENGE_SIZE);
-        return UDS_RESULT_OK;
-    }
-
-    case UDS_AUTH_SUBFUNCTION_VERIFY_PROOF_UNIDIRECTIONAL: {
-        /* Request format: 29 06 <16-byte proof/MAC> */
-        if ((request_length < (2U + UDS_AUTH_CHALLENGE_SIZE)) || !s_challenge_valid) {
-            return UDS_RESULT_SEQUENCE_ERROR;
-        }
-
-        uint8_t expected_mac[16];
-        if (!uds_security_cmac_derive_key(s_auth_master_key, s_active_challenge, expected_mac)) {
-            return UDS_RESULT_ERROR;
-        }
-
-        if (!uds_security_cmac_constant_time_equal(&request[2], expected_mac)) {
-            s_is_authenticated = false;
-            return UDS_RESULT_INVALID_KEY;
-        }
-
-        s_is_authenticated = true;
-        s_challenge_valid = false;
-
-        if (response_capacity < 3U) {
-            return UDS_RESULT_RESPONSE_TOO_LONG;
-        }
-        response[0] = 0x69U;
-        response[1] = subfunction;
-        response[2] = 0x00U; /* Proof accepted */
-        *response_length = 3U;
-        return UDS_RESULT_OK;
-    }
-
-    case UDS_AUTH_SUBFUNCTION_AUTHENTICATION_CONFIG: {
-        /* Response: 69 08 <authMode: 0x01 APCE> <algorithmId: 0x01 AES-CMAC-128> */
-        if (response_capacity < 4U) {
-            return UDS_RESULT_RESPONSE_TOO_LONG;
-        }
-        response[0] = 0x69U;
-        response[1] = subfunction;
-        response[2] = 0x01U; /* APCE Mode */
-        response[3] = 0x01U; /* AES-CMAC-128 */
-        *response_length = 4U;
-        return UDS_RESULT_OK;
-    }
-
+    case UDS_AUTH_SUBFUNCTION_DEAUTHENTICATE:
+        return handle_auth_deauth(subfunction, response, response_length, response_capacity);
+    case UDS_AUTH_SUBFUNCTION_REQUEST_CHALLENGE:
+        return handle_auth_challenge(subfunction, response, response_length, response_capacity);
+    case UDS_AUTH_SUBFUNCTION_VERIFY_PROOF_UNIDIRECTIONAL:
+        return handle_auth_verify_proof(subfunction, request, request_length, response,
+                                        response_length, response_capacity);
+    case UDS_AUTH_SUBFUNCTION_AUTHENTICATION_CONFIG:
+        return handle_auth_config(subfunction, response, response_length, response_capacity);
     default:
         return UDS_RESULT_SUBFUNCTION_NOT_SUPPORTED;
     }

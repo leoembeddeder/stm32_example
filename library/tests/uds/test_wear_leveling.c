@@ -275,6 +275,114 @@ static void test_sequence_rollover(void) {
     assert(recovered.flags == 2U);
 }
 
+#define STRICT_SECTOR_SIZE 512U
+#define STRICT_SECTOR_COUNT 3U
+
+typedef struct {
+    uint8_t buffer[STRICT_SECTOR_SIZE * STRICT_SECTOR_COUNT];
+    uint8_t granule;
+    uint8_t erased_byte;
+    int fail_after_write_count;
+    int write_count;
+} StrictFlashSim;
+
+static StrictFlashSim s_strict_sim;
+
+static int strict_flash_erase(uint32_t addr) {
+    if (addr % STRICT_SECTOR_SIZE != 0U) {
+        return -1;
+    }
+    uint32_t sec = addr / STRICT_SECTOR_SIZE;
+    if (sec >= STRICT_SECTOR_COUNT) {
+        return -1;
+    }
+    memset(&s_strict_sim.buffer[sec * STRICT_SECTOR_SIZE], s_strict_sim.erased_byte, STRICT_SECTOR_SIZE);
+    return 0;
+}
+
+static int strict_flash_read(uint32_t addr, void *buf, size_t len) {
+    if ((addr + len) > sizeof(s_strict_sim.buffer)) {
+        return -1;
+    }
+    memcpy(buf, &s_strict_sim.buffer[addr], len);
+    return 0;
+}
+
+static int strict_flash_write(uint32_t addr, const void *buf, size_t len) {
+    if ((addr + len) > sizeof(s_strict_sim.buffer)) {
+        return -1;
+    }
+    /* Strictly enforce program_granule alignment and length multiple */
+    if ((addr % s_strict_sim.granule != 0U) || (len % s_strict_sim.granule != 0U)) {
+        return -1;
+    }
+    if (s_strict_sim.fail_after_write_count >= 0) {
+        if (s_strict_sim.write_count >= s_strict_sim.fail_after_write_count) {
+            return -1; /* Power loss injection */
+        }
+        s_strict_sim.write_count++;
+    }
+    const uint8_t *src = (const uint8_t *)buf;
+    for (size_t i = 0U; i < len; ++i) {
+        s_strict_sim.buffer[addr + i] &= src[i];
+    }
+    return 0;
+}
+
+static uint32_t strict_flash_sector_size(uint32_t addr) {
+    (void)addr;
+    return STRICT_SECTOR_SIZE;
+}
+
+static void test_issue_91_flash_granules_and_power_loss(void) {
+    static const uint8_t granules[] = {2U, 4U, 8U, 16U, 32U};
+    for (size_t g_idx = 0U; g_idx < sizeof(granules) / sizeof(granules[0]); ++g_idx) {
+        uint8_t g = granules[g_idx];
+        memset(&s_strict_sim, 0xFF, sizeof(s_strict_sim));
+        s_strict_sim.granule = g;
+        s_strict_sim.erased_byte = 0xFFU;
+        s_strict_sim.fail_after_write_count = -1;
+        s_strict_sim.write_count = 0;
+
+        UdsFlashPort port = {
+            .erase = strict_flash_erase,
+            .read = strict_flash_read,
+            .write = strict_flash_write,
+            .sector_size = strict_flash_sector_size,
+            .program_granule = g,
+            .erased_byte = 0xFFU,
+        };
+
+        UdsParamStore store;
+        assert(uds_param_init(&store, &port, 0U, STRICT_SECTOR_COUNT, sizeof(TestData)) == UDS_PARAM_OK);
+        assert(store.program_granule == g);
+        assert(store.slot_size % g == 0U);
+
+        TestData d1 = {.sensor_val = (uint16_t)(0x1000U + g), .flags = 0xAAU, .mode = 0x01U};
+        assert(uds_param_save(&store, &d1) == UDS_PARAM_OK);
+
+        TestData d1_read;
+        assert(uds_param_load(&store, &d1_read) == UDS_PARAM_OK);
+        assert(d1_read.sensor_val == (uint16_t)(0x1000U + g));
+
+        /* Test power loss: inject failure during subsequent save */
+        s_strict_sim.write_count = 0;
+        s_strict_sim.fail_after_write_count = 0; /* Fail on the very first write of next save */
+        TestData d2 = {.sensor_val = 0x9999U, .flags = 0xBBU, .mode = 0x02U};
+        assert(uds_param_save(&store, &d2) != UDS_PARAM_OK);
+
+        /* Recover after power loss / reboot */
+        s_strict_sim.fail_after_write_count = -1;
+        UdsParamStore recovered_store;
+        assert(uds_param_init(&recovered_store, &port, 0U, STRICT_SECTOR_COUNT, sizeof(TestData)) == UDS_PARAM_OK);
+        assert(recovered_store.has_active_slot);
+
+        TestData rec_data;
+        assert(uds_param_load(&recovered_store, &rec_data) == UDS_PARAM_OK);
+        assert(rec_data.sensor_val == (uint16_t)(0x1000U + g)); /* Successfully rolled back to last committed state */
+    }
+}
+
 int main(void) {
     test_crc16();
     test_basic_wear_leveling();
@@ -282,5 +390,6 @@ int main(void) {
     test_power_loss_recovery();
     test_sequence_rollover();
     test_dtc_persistence_integration();
+    test_issue_91_flash_granules_and_power_loss();
     return 0;
 }

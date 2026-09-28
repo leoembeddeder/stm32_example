@@ -25,6 +25,19 @@
 
 #define UDS_APP_RX_FIFO_CAPACITY 8U
 
+/**
+ * Single-Producer, Single-Consumer (SPSC) RX FIFO Concurrency Model:
+ * ------------------------------------------------------------------
+ * Producer: CAN RX ISR context (`uds_app_rx_from_isr`).
+ * Consumer: Main thread / superloop task (`uds_app_process`).
+ * Ownership Rules:
+ * 1. Only ISR modifies `s_rx_head`.
+ * 2. Only Consumer modifies `s_rx_tail`.
+ * 3. Consumer protects index comparison and advance with IRQ disable (`__disable_irq` / `__get_PRIMASK`).
+ * 4. Data Memory Barriers (`__DMB()`) ensure store-to-load and store-to-store order across Cortex-M7
+ *    out-of-order execution, write buffers, and dual-issue pipelines.
+ * 5. Overflow is atomically tracked in `s_rx_overflow_count` and `s_rx_overflow_flag`.
+ */
 static UdsCanTransport *s_transport;
 static UdsIsoTpEndpoint s_endpoint;
 static IsoTpCanFrame s_rx_fifo[UDS_APP_RX_FIFO_CAPACITY];
@@ -132,6 +145,9 @@ void uds_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc) {
     s_rx_fifo[s_rx_head].is_fd = false;
     s_rx_fifo[s_rx_head].bit_rate_switch = false;
     (void)memcpy(s_rx_fifo[s_rx_head].data, data, dlc);
+#if defined(__DMB) || defined(CORTEX_M7) || defined(STM32F767xx)
+    __DMB();
+#endif
     s_rx_head = next_head;
 }
 
@@ -157,8 +173,14 @@ void uds_app_process(uint32_t now_ms) {
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
     if (s_rx_head != s_rx_tail) {
+#if defined(__DMB) || defined(CORTEX_M7) || defined(STM32F767xx)
+        __DMB();
+#endif
         frame = s_rx_fifo[s_rx_tail];
         s_rx_tail = (uint8_t)((s_rx_tail + 1U) % UDS_APP_RX_FIFO_CAPACITY);
+#if defined(__DMB) || defined(CORTEX_M7) || defined(STM32F767xx)
+        __DMB();
+#endif
         has_frame = true;
     }
     __set_PRIMASK(primask);

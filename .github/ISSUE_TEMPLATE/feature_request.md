@@ -1,31 +1,19 @@
 ---
-name: Feature request
-about: Propose a protocol, profile, tooling, or documentation improvement
-title: "[feature] "
-labels: enhancement
-assignees: ""
+name: Feature Request
+about: Suggest an idea or new diagnostic service for this project
+title: '[FEATURE] '
+labels: 'enhancement'
+assignees: ''
 ---
 
-## Problem and use case
+**Is your feature request related to a problem? Please describe.**
+A clear and concise description of what the problem is.
 
-What user, device, or integration problem does this feature solve?
+**Describe the Solution You'd Like**
+A clear and concise description of what you want to happen. Reference relevant ISO 14229-1 or ISO 15765-2 clauses if applicable.
 
-## Proposed behavior
+**Describe Alternatives You've Considered**
+Any alternative solutions or workarounds you've considered.
 
-Describe the intended API, CAN frames, Object Dictionary changes, build option, or documentation change.
-
-## Scope and compatibility
-
-- Affected profiles or modules:
-- Affected Object Dictionary objects:
-- Default behavior impact:
-- Backward-compatibility impact:
-- Hardware dependencies:
-
-## Safety and security considerations
-
-Explain how the change affects safe outputs, diagnostics, gateway access, timing, memory bounds, or network exposure.
-
-## Acceptance criteria
-
-List deterministic tests, build personalities, interoperability checks, and HIL evidence that would demonstrate completion.
+**Target MCU Context**
+Does this apply to all microcontrollers or specific hardware architectures?

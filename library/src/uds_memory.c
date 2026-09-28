@@ -60,6 +60,81 @@ static const UdsMemoryRegion *find_region(const UdsMemoryConfig *config, uint32_
     return NULL;
 }
 
+static UdsCallbackResult parse_memory_request(const uint8_t *request, uint16_t request_len,
+                                              bool is_write, uint16_t *out_header_len,
+                                              uint32_t *out_address, uint32_t *out_size) {
+    uint16_t min_len = is_write ? 5U : 4U;
+    if (request_len < min_len) {
+        return UDS_RESULT_INVALID_FORMAT;
+    }
+
+    uint8_t addr_len = 0U;
+    uint8_t size_len = 0U;
+    if (!uds_memory_decode_alfid(request[1], &addr_len, &size_len)) {
+        return UDS_RESULT_OUT_OF_RANGE;
+    }
+
+    uint16_t header_len = (uint16_t)(2U + addr_len + size_len);
+    if (is_write) {
+        if (request_len <= header_len) {
+            return UDS_RESULT_INVALID_FORMAT;
+        }
+        (void)uds_memory_decode_u32(&request[2], addr_len, out_address);
+        (void)uds_memory_decode_u32(&request[2U + addr_len], size_len, out_size);
+        if (((uint32_t)header_len + *out_size) != (uint32_t)request_len) {
+            return UDS_RESULT_INVALID_FORMAT;
+        }
+    } else {
+        if (request_len != header_len) {
+            return UDS_RESULT_INVALID_FORMAT;
+        }
+        (void)uds_memory_decode_u32(&request[2], addr_len, out_address);
+        (void)uds_memory_decode_u32(&request[2U + addr_len], size_len, out_size);
+    }
+
+    if (*out_size == 0U) {
+        return UDS_RESULT_OUT_OF_RANGE;
+    }
+    *out_header_len = header_len;
+    return UDS_RESULT_OK;
+}
+
+static UdsCallbackResult validate_memory_access(const UdsMemoryManager *mgr, uint8_t sid,
+                                                uint32_t address, uint32_t size,
+                                                uint32_t max_size, uint32_t flag_req,
+                                                uint32_t flag_sec, const UdsMemoryRegion **out_reg) {
+    if ((mgr == NULL) || (mgr->config.regions == NULL)) {
+        return UDS_RESULT_OUT_OF_RANGE;
+    }
+    if ((max_size > 0U) && (size > max_size)) {
+        return UDS_RESULT_OUT_OF_RANGE;
+    }
+    if (mgr->config.condition_check != NULL) {
+        if (!mgr->config.condition_check(mgr->config.user_ctx, sid, address, size)) {
+            return UDS_RESULT_DENIED;
+        }
+    }
+
+    const UdsMemoryRegion *reg = find_region(&mgr->config, address, size);
+    if ((reg == NULL) || ((reg->flags & flag_req) == 0U)) {
+        return UDS_RESULT_OUT_OF_RANGE;
+    }
+
+    const UdsServer *server = mgr->config.server;
+    uint8_t session = (server != NULL) ? uds_server_session(server) : UDS_SESSION_DEFAULT;
+    uint8_t security_level = (server != NULL) ? uds_server_security_level(server) : 0U;
+
+    if (((reg->flags & UDS_MEMORY_FLAG_PROG_ONLY) != 0U) && (session != UDS_SESSION_PROGRAMMING)) {
+        return UDS_RESULT_DENIED;
+    }
+    if (((reg->flags & flag_sec) != 0U) && (security_level == 0U)) {
+        return UDS_RESULT_SECURITY_DENIED;
+    }
+
+    *out_reg = reg;
+    return UDS_RESULT_OK;
+}
+
 UdsCallbackResult uds_memory_read_handler(void *context, const uint8_t *request,
                                           uint16_t request_len, uint8_t *response,
                                           uint16_t *response_len, uint16_t capacity) {
@@ -67,71 +142,29 @@ UdsCallbackResult uds_memory_read_handler(void *context, const uint8_t *request,
         return UDS_RESULT_ERROR;
     }
 
-    /* 1. Min length check: SID (1) + ALFID (1) + min addr (1) + min size (1) = 4 */
-    if (request_len < 4U) {
-        return UDS_RESULT_INVALID_FORMAT;
-    }
-
-    /* 2. ALFID validation: 1 to 4 bytes for both address and length */
-    uint8_t addr_len = 0U;
-    uint8_t size_len = 0U;
-    if (!uds_memory_decode_alfid(request[1], &addr_len, &size_len)) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-
-    /* 3. Total length check: strictly 2 + addr_len + size_len */
-    uint16_t expected_len = (uint16_t)(2U + addr_len + size_len);
-    if (request_len != expected_len) {
-        return UDS_RESULT_INVALID_FORMAT;
-    }
-
-    /* 4. Decode memoryAddress and memorySize */
+    uint16_t header_len = 0U;
     uint32_t address = 0U;
     uint32_t size = 0U;
-    (void)uds_memory_decode_u32(&request[2], addr_len, &address);
-    (void)uds_memory_decode_u32(&request[2U + addr_len], size_len, &size);
-
-    /* 5. memorySize check: zero is invalid */
-    if (size == 0U) {
-        return UDS_RESULT_OUT_OF_RANGE;
+    UdsCallbackResult parse_res = parse_memory_request(request, request_len, false,
+                                                       &header_len, &address, &size);
+    if (parse_res != UDS_RESULT_OK) {
+        return parse_res;
     }
 
     const UdsMemoryManager *mgr = resolve_manager(context);
-    if ((mgr == NULL) || (mgr->config.regions == NULL)) {
-        return UDS_RESULT_OUT_OF_RANGE;
+    const UdsMemoryRegion *reg = NULL;
+    UdsCallbackResult val_res = validate_memory_access(mgr, 0x23U, address, size,
+                                                       (mgr != NULL) ? mgr->config.max_read_size : 0U,
+                                                       UDS_MEMORY_FLAG_READ,
+                                                       UDS_MEMORY_FLAG_SECURE_READ, &reg);
+    if (val_res != UDS_RESULT_OK) {
+        return val_res;
     }
 
-    uint32_t max_read = (mgr->config.max_read_size > 0U) ? mgr->config.max_read_size : 0xFFFFFFFFU;
-    if (size > max_read) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-
-    /* 6. Condition check */
-    if (mgr->config.condition_check != NULL) {
-        if (!mgr->config.condition_check(mgr->config.user_ctx, 0x23U, address, size)) {
-            return UDS_RESULT_DENIED;
-        }
-    }
-
-    /* 7. Address range and permission check */
-    const UdsMemoryRegion *reg = find_region(&mgr->config, address, size);
-    if ((reg == NULL) || ((reg->flags & UDS_MEMORY_FLAG_READ) == 0U)) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-
-    /* 8. Security check */
-    const UdsServer *server = mgr->config.server;
-    uint8_t security_level = (server != NULL) ? uds_server_security_level(server) : 0U;
-    if (((reg->flags & UDS_MEMORY_FLAG_SECURE_READ) != 0U) && (security_level == 0U)) {
-        return UDS_RESULT_SECURITY_DENIED;
-    }
-
-    /* 9. Capacity check */
     if (capacity < (uint16_t)(1U + size)) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
     }
 
-    /* 10. Execute read */
     if (reg->read != NULL) {
         UdsCallbackResult read_res = reg->read(reg->driver_ctx, address, &response[1], size);
         if (read_res != UDS_RESULT_OK) {
@@ -141,7 +174,6 @@ UdsCallbackResult uds_memory_read_handler(void *context, const uint8_t *request,
         (void)memcpy(&response[1], (const void *)(uintptr_t)address, size);
     }
 
-    /* 11. Format positive response */
     response[0] = 0x63U;
     *response_len = (uint16_t)(1U + size);
     return UDS_RESULT_OK;
@@ -154,80 +186,25 @@ UdsCallbackResult uds_memory_write_handler(void *context, const uint8_t *request
         return UDS_RESULT_ERROR;
     }
 
-    /* 1. Min length check: SID (1) + ALFID (1) + min addr (1) + min size (1) + min data (1) = 5 */
-    if (request_len < 5U) {
-        return UDS_RESULT_INVALID_FORMAT;
-    }
-
-    /* 2. ALFID validation: 1 to 4 bytes for both address and length */
-    uint8_t addr_len = 0U;
-    uint8_t size_len = 0U;
-    if (!uds_memory_decode_alfid(request[1], &addr_len, &size_len)) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-
-    /* 3. Intermediate length check */
-    uint16_t header_len = (uint16_t)(2U + addr_len + size_len);
-    if (request_len <= header_len) {
-        return UDS_RESULT_INVALID_FORMAT;
-    }
-
-    /* 4. Decode memoryAddress and memorySize */
+    uint16_t header_len = 0U;
     uint32_t address = 0U;
     uint32_t size = 0U;
-    (void)uds_memory_decode_u32(&request[2], addr_len, &address);
-    (void)uds_memory_decode_u32(&request[2U + addr_len], size_len, &size);
-
-    /* 5. Exact total length check: strictly 2 + addr_len + size_len + size */
-    uint32_t expected_total = (uint32_t)header_len + size;
-    if ((uint32_t)request_len != expected_total) {
-        return UDS_RESULT_INVALID_FORMAT;
-    }
-
-    /* 6. memorySize check: zero is invalid */
-    if (size == 0U) {
-        return UDS_RESULT_OUT_OF_RANGE;
+    UdsCallbackResult parse_res = parse_memory_request(request, request_len, true,
+                                                       &header_len, &address, &size);
+    if (parse_res != UDS_RESULT_OK) {
+        return parse_res;
     }
 
     const UdsMemoryManager *mgr = resolve_manager(context);
-    if ((mgr == NULL) || (mgr->config.regions == NULL)) {
-        return UDS_RESULT_OUT_OF_RANGE;
+    const UdsMemoryRegion *reg = NULL;
+    UdsCallbackResult val_res = validate_memory_access(mgr, 0x3DU, address, size,
+                                                       (mgr != NULL) ? mgr->config.max_write_size : 0U,
+                                                       UDS_MEMORY_FLAG_WRITE,
+                                                       UDS_MEMORY_FLAG_SECURE_WRITE, &reg);
+    if (val_res != UDS_RESULT_OK) {
+        return val_res;
     }
 
-    uint32_t max_write =
-        (mgr->config.max_write_size > 0U) ? mgr->config.max_write_size : 0xFFFFFFFFU;
-    if (size > max_write) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-
-    /* 7. Condition check */
-    if (mgr->config.condition_check != NULL) {
-        if (!mgr->config.condition_check(mgr->config.user_ctx, 0x3DU, address, size)) {
-            return UDS_RESULT_DENIED;
-        }
-    }
-
-    /* 8. Address range and permission check */
-    const UdsMemoryRegion *reg = find_region(&mgr->config, address, size);
-    if ((reg == NULL) || ((reg->flags & UDS_MEMORY_FLAG_WRITE) == 0U)) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-
-    const UdsServer *server = mgr->config.server;
-    uint8_t session = (server != NULL) ? uds_server_session(server) : UDS_SESSION_DEFAULT;
-    uint8_t security_level = (server != NULL) ? uds_server_security_level(server) : 0U;
-
-    /* Check programming session requirement for prog-only regions */
-    if (((reg->flags & UDS_MEMORY_FLAG_PROG_ONLY) != 0U) && (session != UDS_SESSION_PROGRAMMING)) {
-        return UDS_RESULT_DENIED;
-    }
-
-    /* 9. Security check */
-    if (((reg->flags & UDS_MEMORY_FLAG_SECURE_WRITE) != 0U) && (security_level == 0U)) {
-        return UDS_RESULT_SECURITY_DENIED;
-    }
-
-    /* 10. Execute write */
     const uint8_t *data = &request[header_len];
     if (reg->write != NULL) {
         UdsCallbackResult write_res = reg->write(reg->driver_ctx, address, data, size);
@@ -238,7 +215,6 @@ UdsCallbackResult uds_memory_write_handler(void *context, const uint8_t *request
         (void)memcpy((void *)(uintptr_t)address, data, size);
     }
 
-    /* 11. Format positive response: echo ALFID, address, size */
     if (capacity < header_len) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
     }
