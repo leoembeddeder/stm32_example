@@ -111,8 +111,8 @@ jobs:
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ctest --test-dir build/sanitize --output-on-failure
       - name: LibFuzzer execution
         run: |
-          clang -fsanitize=fuzzer,address,undefined -O1 -g -Ilibrary/include tests/fuzzing/fuzz_isotp_rx.c library/src/isotp.c -o /tmp/fuzz_isotp_rx
-          clang -fsanitize=fuzzer,address,undefined -O1 -g -Ilibrary/include -Ilibrary/include/uds_iso_tp -Ilibrary/crypto tests/fuzzing/fuzz_uds_request.c library/src/*.c library/crypto/*.c -o /tmp/fuzz_uds_request
+          clang -fsanitize=fuzzer,address,undefined -O1 -g -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION -Ilibrary/include tests/fuzzing/fuzz_isotp_rx.c library/src/isotp.c -o /tmp/fuzz_isotp_rx
+          clang -fsanitize=fuzzer,address,undefined -O1 -g -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION -Ilibrary/include -Ilibrary/include/uds_iso_tp -Ilibrary/crypto tests/fuzzing/fuzz_uds_request.c library/src/*.c library/crypto/*.c -o /tmp/fuzz_uds_request
           /tmp/fuzz_isotp_rx -max_total_time=10 -timeout=5
           /tmp/fuzz_uds_request -max_total_time=10 -timeout=5
       - name: Format check
