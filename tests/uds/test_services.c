@@ -75,5 +75,36 @@ int main(void) {
     assert(uds_service_backends_preflight(&unbounded_backends, NULL, 0x2AU, allowed_memory_request,
                                           sizeof(allowed_memory_request)) ==
            UDS_RESULT_NOT_SUPPORTED);
+
+    /* Test empty backends where every sub-pointer is NULL */
+    const UdsServiceBackends empty_backends = {0};
+    for (size_t index = 0U; index < sizeof(service_ids); ++index) {
+        assert(uds_service_backends_handler(&empty_backends, service_ids[index]) == NULL);
+    }
+
+    /* Preflight branches */
+    assert(uds_service_backends_preflight(NULL, NULL, 0x23U, allowed_memory_request,
+                                          sizeof(allowed_memory_request)) ==
+           UDS_RESULT_NOT_SUPPORTED);
+
+    const UdsMemoryServiceBackend mem_no_check = {.check_access = NULL};
+    const UdsServiceBackends mem_no_check_backends = {.memory = &mem_no_check};
+    assert(uds_service_backends_preflight(&mem_no_check_backends, NULL, 0x23U,
+                                          allowed_memory_request,
+                                          sizeof(allowed_memory_request)) == UDS_RESULT_OK);
+    assert(uds_service_backends_preflight(&empty_backends, NULL, 0x3DU, allowed_memory_request,
+                                          sizeof(allowed_memory_request)) == UDS_RESULT_OK);
+
+    assert(uds_service_backends_preflight(&empty_backends, NULL, 0x2AU, allowed_memory_request,
+                                          sizeof(allowed_memory_request)) ==
+           UDS_RESULT_NOT_SUPPORTED);
+    assert(uds_service_backends_preflight(&empty_backends, NULL, 0x86U, allowed_memory_request,
+                                          sizeof(allowed_memory_request)) ==
+           UDS_RESULT_NOT_SUPPORTED);
+    assert(uds_service_backends_preflight(&backends, NULL, 0x86U, allowed_memory_request,
+                                          sizeof(allowed_memory_request)) == UDS_RESULT_OK);
+    assert(uds_service_backends_preflight(&backends, NULL, 0x10U, allowed_memory_request,
+                                          sizeof(allowed_memory_request)) == UDS_RESULT_OK);
+
     return 0;
 }

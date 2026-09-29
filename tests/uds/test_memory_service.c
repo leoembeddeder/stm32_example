@@ -620,10 +620,72 @@ static void test_uds_memory_app_integration(void) {
     assert(response[1] == 0xAAU && response[2] == 0xAAU);
 }
 
+static void test_uds_memory_edge_cases(void) {
+    uint8_t a = 0U, s = 0U;
+    uint32_t val = 0U;
+    uint8_t buf[8] = {1, 2, 3, 4};
+
+    /* ALFID NULL pointers */
+    assert(uds_memory_decode_alfid(0x11U, NULL, NULL));
+    assert(uds_memory_decode_alfid(0x11U, &a, NULL) && (a == 1U));
+    assert(uds_memory_decode_alfid(0x21U, NULL, &s) && (s == 2U));
+    assert(!uds_memory_decode_alfid(0x01U, &a, &s));
+    assert(!uds_memory_decode_alfid(0x51U, &a, &s));
+    assert(!uds_memory_decode_alfid(0x10U, &a, &s));
+    assert(!uds_memory_decode_alfid(0x15U, &a, &s));
+
+    /* decode_u32 errors */
+    assert(!uds_memory_decode_u32(NULL, 1U, &val));
+    assert(!uds_memory_decode_u32(buf, 0U, &val));
+    assert(!uds_memory_decode_u32(buf, 5U, &val));
+    assert(!uds_memory_decode_u32(buf, 1U, NULL));
+
+    /* Memory manager init errors */
+    UdsMemoryManager mgr;
+    uds_memory_init(NULL, NULL);
+    uds_memory_init(&mgr, NULL);
+    UdsMemoryConfig bad_cfg = {0};
+    uds_memory_init(&mgr, &bad_cfg);
+
+    /* Server and backend NULL checks */
+    uds_memory_set_server(NULL, NULL);
+    uds_memory_set_server(&mgr, NULL);
+    assert(uds_memory_get_backend(NULL) == NULL);
+
+    /* Handler NULL checks */
+    uint8_t resp[32];
+    uint16_t rlen = 0U;
+    uint8_t req[] = {0x23U, 0x11U, 0x10U, 0x01U};
+    assert(uds_memory_read_handler(NULL, req, sizeof(req), resp, &rlen, sizeof(resp)) ==
+           UDS_RESULT_OUT_OF_RANGE);
+    assert(uds_memory_read_handler(&mgr, req, sizeof(req), NULL, &rlen, sizeof(resp)) ==
+           UDS_RESULT_ERROR);
+    assert(uds_memory_read_handler(&mgr, req, sizeof(req), resp, NULL, sizeof(resp)) ==
+           UDS_RESULT_ERROR);
+    assert(uds_memory_read_handler(&mgr, req, sizeof(req), resp, &rlen, 0U) ==
+           UDS_RESULT_OUT_OF_RANGE);
+
+    uint8_t req_w[] = {0x3DU, 0x11U, 0x10U, 0x01U, 0xAAU};
+    assert(uds_memory_write_handler(NULL, req_w, sizeof(req_w), resp, &rlen, sizeof(resp)) ==
+           UDS_RESULT_OUT_OF_RANGE);
+    assert(uds_memory_write_handler(&mgr, req_w, sizeof(req_w), NULL, &rlen, sizeof(resp)) ==
+           UDS_RESULT_ERROR);
+    assert(uds_memory_write_handler(&mgr, req_w, sizeof(req_w), resp, NULL, sizeof(resp)) ==
+           UDS_RESULT_ERROR);
+    assert(uds_memory_write_handler(&mgr, req_w, sizeof(req_w), resp, &rlen, 0U) ==
+           UDS_RESULT_OUT_OF_RANGE);
+
+    /* check_access edge cases */
+    assert(uds_memory_check_access(NULL, 0x23U, req, sizeof(req)) == UDS_RESULT_OK);
+    assert(uds_memory_check_access(&mgr, 0x10U, req, sizeof(req)) == UDS_RESULT_OK);
+    assert(uds_memory_check_access(&mgr, 0x23U, NULL, 0U) == UDS_RESULT_OK);
+}
+
 int main(void) {
     test_alfid_and_u32_helpers();
     test_iso_0x23_examples_and_nrc();
     test_iso_0x3D_examples_and_nrc();
     test_uds_memory_app_integration();
+    test_uds_memory_edge_cases();
     return 0;
 }

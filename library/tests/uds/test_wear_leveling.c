@@ -413,6 +413,37 @@ static void test_erase_all_and_null_guards(void) {
     assert(uds_param_erase_all(&store) == UDS_PARAM_OK);
     assert(!store.has_active_slot);
     assert(uds_param_write_count(&store) == 0U);
+
+    /* Load when not active */
+    assert(uds_param_load(&store, &read_data) == UDS_PARAM_ERR);
+
+    /* Test CRC with NULL data */
+    assert(uds_crc16_ccitt_update(0x1234U, NULL, 10U) == 0x1234U);
+
+    /* Test invalid port configuration */
+    UdsFlashPort invalid_port = s_test_flash_port;
+    invalid_port.erase = NULL;
+    assert(uds_param_init(&store, &invalid_port, 0U, 2U, 8U) == UDS_PARAM_INVALID_PARAM);
+    invalid_port = s_test_flash_port;
+    invalid_port.read = NULL;
+    assert(uds_param_init(&store, &invalid_port, 0U, 2U, 8U) == UDS_PARAM_INVALID_PARAM);
+    invalid_port = s_test_flash_port;
+    invalid_port.write = NULL;
+    assert(uds_param_init(&store, &invalid_port, 0U, 2U, 8U) == UDS_PARAM_INVALID_PARAM);
+    invalid_port = s_test_flash_port;
+    invalid_port.sector_size = NULL;
+    assert(uds_param_init(&store, &invalid_port, 0U, 2U, 8U) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_init(&store, &s_test_flash_port, 0U, 0U, 8U) == UDS_PARAM_INVALID_PARAM);
+    assert(uds_param_init(&store, &s_test_flash_port, 0U, 2U, 0U) == UDS_PARAM_INVALID_PARAM);
+
+    /* Test non-power-of-2 granule */
+    invalid_port = s_test_flash_port;
+    invalid_port.program_granule = 3U;
+    assert(uds_param_init(&store, &invalid_port, 0U, 2U, 8U) == UDS_PARAM_INVALID_PARAM);
+
+    /* Test slots_per_sector < 2 (data size too large for sector) */
+    assert(uds_param_init(&store, &s_test_flash_port, 0U, 2U, TEST_SECTOR_SIZE) ==
+           UDS_PARAM_INVALID_PARAM);
 }
 
 int main(void) {

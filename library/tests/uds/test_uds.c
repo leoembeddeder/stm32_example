@@ -653,6 +653,77 @@ static void test_did_registry(void) {
     uds_did_registry_init(&reg, NULL);
 }
 
+static void test_uds_branches(void) {
+    /* 1. uds_server_init NULL guard */
+    uds_server_init(NULL, NULL, NULL, 0U);
+
+    /* 2. uds_security_subfunction_level edge cases */
+    uint8_t lvl = 0U;
+    bool is_seed = false;
+    assert(!uds_security_subfunction_level(0x01U, NULL, &is_seed));
+    assert(!uds_security_subfunction_level(0x01U, &lvl, NULL));
+    assert(!uds_security_subfunction_level(0x00U, &lvl, &is_seed));
+    assert(!uds_security_subfunction_level(0x0BU, &lvl, &is_seed));
+    assert(!uds_security_subfunction_level(0x81U, &lvl, &is_seed)); /* Seed with SPRMIB */
+    assert(uds_security_subfunction_level(0x82U, &lvl, &is_seed) && !is_seed && (lvl == 1U));
+
+    /* 3. uds_service_attribute_allows edge cases */
+    assert(!uds_service_attribute_allows(NULL, UDS_SESSION_DEFAULT, 0U, UDS_ADDRESS_PHYSICAL));
+    const UdsServiceAttribute custom_attr = {0xAAU, 0x01U, UDS_SESSION_MASK_EXTENDED, 0x0002U,
+                                             (uint8_t)UDS_ADDRESS_PHYSICAL};
+    /* Session mismatch */
+    assert(
+        !uds_service_attribute_allows(&custom_attr, UDS_SESSION_DEFAULT, 1U, UDS_ADDRESS_PHYSICAL));
+    /* Address mode mismatch */
+    assert(!uds_service_attribute_allows(&custom_attr, UDS_SESSION_EXTENDED, 1U,
+                                         UDS_ADDRESS_FUNCTIONAL));
+    /* Security mismatch */
+    assert(!uds_service_attribute_allows(&custom_attr, UDS_SESSION_EXTENDED, 0U,
+                                         UDS_ADDRESS_PHYSICAL));
+    /* Matching */
+    assert(
+        uds_service_attribute_allows(&custom_attr, UDS_SESSION_EXTENDED, 1U, UDS_ADDRESS_PHYSICAL));
+
+    /* 4. Functional suppression of NRCs */
+    UdsServer server;
+    uds_server_init(&server, NULL, NULL, 1000U);
+    uint8_t resp[32];
+    uint16_t rlen = 0U;
+
+    /* Unsupported service on functional -> no response */
+    uint8_t unsupp_req[] = {0xAAU};
+    assert(uds_server_handle_addressed(&server, unsupp_req, sizeof(unsupp_req), resp, &rlen,
+                                       sizeof(resp), UDS_ADDRESS_FUNCTIONAL,
+                                       1000U) == UDS_RESULT_NO_RESPONSE);
+
+    /* Capacity < 3 on error -> RESPONSE_TOO_LONG */
+    assert(uds_server_handle_addressed(&server, unsupp_req, sizeof(unsupp_req), resp, &rlen, 2U,
+                                       UDS_ADDRESS_PHYSICAL,
+                                       1000U) == UDS_RESULT_RESPONSE_TOO_LONG);
+
+    /* Invalid arguments to uds_server_handle_addressed */
+    assert(uds_server_handle_addressed(&server, NULL, 0U, resp, &rlen, sizeof(resp),
+                                       UDS_ADDRESS_PHYSICAL, 1000U) == UDS_RESULT_ERROR);
+    assert(uds_server_handle_addressed(&server, unsupp_req, sizeof(unsupp_req), NULL, &rlen,
+                                       sizeof(resp), UDS_ADDRESS_PHYSICAL,
+                                       1000U) == UDS_RESULT_ERROR);
+    assert(uds_server_handle_addressed(&server, unsupp_req, sizeof(unsupp_req), resp, NULL,
+                                       sizeof(resp), UDS_ADDRESS_PHYSICAL,
+                                       1000U) == UDS_RESULT_ERROR);
+
+    /* NULL getters */
+    assert(uds_server_session(NULL) == UDS_SESSION_DEFAULT);
+    assert(uds_server_security_level(NULL) == 0U);
+    assert(!uds_server_reset_pending(NULL));
+    uds_server_clear_reset(NULL);
+    assert(uds_server_complete_reset(NULL) == UDS_RESULT_ERROR);
+    assert(uds_server_request_session(NULL, UDS_SESSION_DEFAULT, 0U) == UDS_RESULT_OUT_OF_RANGE);
+    assert(uds_server_tick(NULL, 0U) == UDS_RESULT_ERROR);
+
+    /* Safety session transition denied from default session */
+    assert(uds_server_request_session(&server, UDS_SESSION_SAFETY, 1000U) == UDS_RESULT_DENIED);
+}
+
 int main(void) {
     test_service_attributes();
     test_addressed_dispatch();
@@ -660,5 +731,6 @@ int main(void) {
     test_uds();
     test_reentrant_multi_instance_servers();
     test_did_registry();
+    test_uds_branches();
     return 0;
 }

@@ -170,7 +170,62 @@ int main(void) {
     Flash_ContextClear();
     assert(Flash_GetState() == FLASH_STATE_IDLE);
 
-    /* 7. Test 128 KiB range erase with interleaved UDS server servicing */
+    /* 7. Test write/erase requests from ERASE_DONE and WRITE_DONE states */
+    assert(Flash_RequestWrite(sample_data, 8));
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_WRITE_DONE);
+    /* Can request another write while in WRITE_DONE */
+    assert(Flash_RequestWrite(sample_data, 8));
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_WRITE_DONE);
+    /* Can request erase while in WRITE_DONE */
+    assert(Flash_RequestErase(0x100U));
+    assert(Flash_GetState() == FLASH_STATE_ERASE);
+    /* Cannot request write or erase while in ERASE */
+    assert(!Flash_RequestWrite(sample_data, 8));
+    assert(!Flash_RequestErase(0x200U));
+    assert(!Flash_RequestRangeErase(0x200U, 100U, 50U));
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_ERASE_DONE);
+    /* Can request erase while in ERASE_DONE */
+    assert(Flash_RequestErase(0x100U));
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_ERASE_DONE);
+    /* Can request range erase while in ERASE_DONE */
+    assert(Flash_RequestRangeErase(0x100U, 20U, 10U));
+    assert(Flash_GetState() == FLASH_STATE_ERASE);
+    Flash_MainFunction();
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_ERASE_DONE);
+
+    /* 8. Test invalid RangeErase arguments */
+    assert(!Flash_RequestRangeErase(0x100U, 0U, 10U));
+    assert(!Flash_RequestRangeErase(0x100U, 20U, 0U));
+
+    /* 9. Test range erase failure */
+    s_mock_fail_erase = true;
+    assert(Flash_RequestRangeErase(0x100U, 20U, 10U));
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_ERASE_FAIL);
+    s_mock_fail_erase = false;
+    Flash_StateClear();
+
+    /* 10. Test operations with NULL hardware callbacks */
+    Flash_SetHardwareInterface(NULL, NULL);
+    assert(Flash_RequestWrite(sample_data, 8));
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_WRITE_DONE);
+    assert(Flash_RequestErase(0x100U));
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_ERASE_DONE);
+
+    /* 11. Test steady states in Flash_MainFunction */
+    Flash_StateClear();
+    assert(Flash_GetState() == FLASH_STATE_IDLE);
+    Flash_MainFunction();
+    assert(Flash_GetState() == FLASH_STATE_IDLE);
+
+    /* 12. Test 128 KiB range erase with interleaved UDS server servicing */
     test_128kib_range_erase_interleaved_uds_service();
 
     return 0;

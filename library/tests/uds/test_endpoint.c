@@ -376,11 +376,91 @@ static void test_flow_control_error_and_timeout(void) {
     assert(isotp_tx_state(&endpoint.tx) == ISOTP_TX_STATE_IDLE);
 }
 
+static bool failing_tx_error(void *context) {
+    (void)context;
+    return true;
+}
+
+static bool tx_complete_manual(void *context) {
+    (void)context;
+    return false;
+}
+
+static void test_endpoint_null_and_error_guards(void) {
+    IsoTpConfig transport;
+    isotp_config_classic_can(&transport);
+    Sink sink = {0};
+    UdsIsoTpEndpointConfig config = {
+        .send_frame = send_frame,
+        .clock_ms = clock_ms,
+        .context = &sink,
+        .isotp_config = transport,
+        .request_id = 0x7E0U,
+        .response_id = 0x7E8U,
+        .functional_request_id = 0x7DFU,
+    };
+    UdsIsoTpEndpoint endpoint;
+
+    /* Init NULL / invalid checks */
+    assert(!uds_isotp_endpoint_init(NULL, &config, 0U));
+    assert(!uds_isotp_endpoint_init(&endpoint, NULL, 0U));
+    UdsIsoTpEndpointConfig bad_cfg = config;
+    bad_cfg.send_frame = NULL;
+    assert(!uds_isotp_endpoint_init(&endpoint, &bad_cfg, 0U));
+    bad_cfg = config;
+    bad_cfg.clock_ms = NULL;
+    assert(!uds_isotp_endpoint_init(&endpoint, &bad_cfg, 0U));
+    bad_cfg = config;
+    bad_cfg.request_id = bad_cfg.response_id;
+    assert(!uds_isotp_endpoint_init(&endpoint, &bad_cfg, 0U));
+    bad_cfg = config;
+    bad_cfg.uds_callbacks.ecu_reset = ecu_reset_prepare;
+    bad_cfg.tx_complete = NULL;
+    assert(!uds_isotp_endpoint_init(&endpoint, &bad_cfg, 0U));
+
+    assert(uds_isotp_endpoint_init(&endpoint, &config, 0U));
+    assert(uds_isotp_endpoint_server(&endpoint) == &endpoint.uds);
+    assert(uds_isotp_endpoint_server(NULL) == NULL);
+    assert(uds_iso_tp_version() != NULL);
+
+    /* Receive argument checks */
+    IsoTpCanFrame req = tester_present(false);
+    assert(uds_isotp_endpoint_receive(NULL, &req, 0U) == ISOTP_ERR_ARGUMENT);
+    assert(uds_isotp_endpoint_receive(&endpoint, NULL, 0U) == ISOTP_ERR_ARGUMENT);
+    IsoTpCanFrame zero_dlc = req;
+    zero_dlc.dlc = 0U;
+    assert(uds_isotp_endpoint_receive(&endpoint, &zero_dlc, 0U) == ISOTP_ERR_ARGUMENT);
+
+    /* Functional non-single-frame check */
+    IsoTpCanFrame func_cf = req;
+    func_cf.can_id = config.functional_request_id;
+    func_cf.data[0] = 0x21U; /* CF */
+    assert(uds_isotp_endpoint_receive(&endpoint, &func_cf, 0U) == ISOTP_OK);
+
+    /* Process and tick argument checks */
+    assert(uds_isotp_endpoint_process(NULL, 0U) == ISOTP_ERR_ARGUMENT);
+    assert(uds_isotp_endpoint_tick(NULL, 0U) == ISOTP_ERR_ARGUMENT);
+    uds_isotp_endpoint_tx_complete(NULL);
+    uds_isotp_endpoint_tx_complete(&endpoint);
+
+    /* Test tx_error abort in flight */
+    UdsIsoTpEndpointConfig tx_err_cfg = config;
+    tx_err_cfg.tx_complete = tx_complete_manual;
+    tx_err_cfg.tx_error = failing_tx_error;
+    assert(uds_isotp_endpoint_init(&endpoint, &tx_err_cfg, 0U));
+    assert(uds_isotp_endpoint_receive(&endpoint, &req, 0U) == ISOTP_TX_FRAME_READY);
+    /* Process once sends pending frame, setting tx_in_flight */
+    assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
+    /* Next process detects tx_error */
+    assert(uds_isotp_endpoint_process(&endpoint, 1U) == ISOTP_ERR_STATE);
+}
+
 int main(void) {
     run_multiframe_profile(false, 20U);
     run_multiframe_profile(true, 64U);
     test_deferred_reset_and_full_duplex();
     test_functional_endpoint_addressing();
     test_flow_control_error_and_timeout();
+    test_endpoint_null_and_error_guards();
     return 0;
 }
