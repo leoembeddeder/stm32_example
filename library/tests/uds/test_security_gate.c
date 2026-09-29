@@ -115,11 +115,11 @@ static void test_zero_timing_and_branches(void) {
     uds_security_gate_tick(&gate, 1000U);
     assert(gate.seed_valid == true); /* No timer, seed remains valid until used or failure */
 
-    /* lockout_ms = 0 -> lockout_active is false on failure */
+    /* lockout_ms = 0 -> clamped to 10000U non-zero minimum, lockout_active is true on failure */
     uds_security_gate_record_failure(&gate, 1100U);
     assert(gate.failed_attempts == 1U);
-    assert(gate.lockout_active == false);
-    assert(gate.state == UDS_SECURITY_STATE_LOCKED_READY);
+    assert(gate.lockout_active == true);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKOUT);
 
     /* Tick when lockout_active is true but state is not LOCKOUT */
     gate.lockout_active = true;
@@ -163,12 +163,66 @@ static void test_reset_session_and_ecu(void) {
     assert(gate.state == UDS_SECURITY_STATE_LOCKOUT);
     assert(gate.failed_attempts == 2U);
 
-    /* Full ECU reset clears lockout and counter */
+    /* P0-3 Acceptance: Full ECU reset (0x11) does NOT clear lockout or failed attempt counter */
     uds_security_gate_reset_ecu(&gate, 3000U);
+    assert(gate.state == UDS_SECURITY_STATE_LOCKOUT);
+    assert(gate.failed_attempts == 2U);
+    assert(gate.lockout_active == true);
+    assert(uds_security_gate_delay_active(&gate, 3000U) == true);
+
+    /* Lockout expires only after lockout timer (5000ms from t=2300 -> 7300ms) */
+    uds_security_gate_tick(&gate, 7300U);
     assert(gate.state == UDS_SECURITY_STATE_LOCKED_READY);
     assert(gate.failed_attempts == 0U);
     assert(gate.lockout_active == false);
-    assert(uds_security_gate_delay_active(&gate, 3000U) == false);
+    assert(uds_security_gate_delay_active(&gate, 7300U) == false);
+}
+
+static uint8_t s_persisted_attempts = 0U;
+static uint32_t s_persisted_remaining = 0U;
+static void test_save_fn(uint8_t failed_attempts, uint32_t lockout_remaining_ms, void *context) {
+    (void)context;
+    s_persisted_attempts = failed_attempts;
+    s_persisted_remaining = lockout_remaining_ms;
+}
+
+static void test_persistence_and_restore(void) {
+    UdsSecurityGate gate;
+    uds_security_gate_init(&gate, 0U);
+    uds_security_gate_set_timing(&gate, 0U, 10000U, 2000U, 2U, 0U);
+    uds_security_gate_set_persistence(&gate, test_save_fn, NULL);
+
+    uds_security_gate_grant_seed(&gate, 1U, 100U);
+    uds_security_gate_record_failure(&gate, 200U);
+    assert(s_persisted_attempts == 1U);
+    assert(s_persisted_remaining == 0U);
+
+    uds_security_gate_grant_seed(&gate, 1U, 300U);
+    uds_security_gate_record_failure(&gate, 400U);
+    assert(s_persisted_attempts == 2U);
+    assert(s_persisted_remaining == 10000U);
+
+    /* Simulate power cycle: new gate initialized, then restore state from persistent store */
+    UdsSecurityGate restored_gate;
+    uds_security_gate_init(&restored_gate, 5000U);
+    uds_security_gate_set_timing(&restored_gate, 0U, 10000U, 2000U, 2U, 5000U);
+    uds_security_gate_restore_state(&restored_gate, s_persisted_attempts, s_persisted_remaining,
+                                    5000U);
+
+    /* Restored gate is still locked out! */
+    assert(restored_gate.state == UDS_SECURITY_STATE_LOCKOUT);
+    assert(restored_gate.failed_attempts == 2U);
+    assert(uds_security_gate_delay_active(&restored_gate, 5000U) == true);
+    assert(uds_security_gate_delay_active(&restored_gate, 14999U) == true);
+
+    /* After 10s delay expires at t=15000 */
+    uds_security_gate_tick(&restored_gate, 15000U);
+    assert(restored_gate.state == UDS_SECURITY_STATE_LOCKED_READY);
+    assert(uds_security_gate_delay_active(&restored_gate, 15000U) == false);
+
+    /* NULL guards for new persistence and restore functions */
+    uds_security_gate_set_persistence(NULL, NULL, NULL);
+    uds_security_gate_restore_state(NULL, 0U, 0U, 0U);
 }
 
 int main(void) {
@@ -178,6 +232,7 @@ int main(void) {
     test_null_guards();
     test_zero_timing_and_branches();
     test_reset_session_and_ecu();
+    test_persistence_and_restore();
     printf("UDS SecurityGate tests passed successfully.\n");
     return 0;
 }

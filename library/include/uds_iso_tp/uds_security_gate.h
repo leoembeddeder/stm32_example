@@ -3,7 +3,19 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "uds_iso_tp/uds.h"
+
+#ifndef UDS_SECURITY_STATE_DEFINED
+#define UDS_SECURITY_STATE_DEFINED
+typedef enum {
+    UDS_SECURITY_STATE_LOCKED_READY = 0,
+    UDS_SECURITY_STATE_WAITING_FOR_KEY,
+    UDS_SECURITY_STATE_UNLOCKED,
+    UDS_SECURITY_STATE_LOCKOUT
+} UdsSecurityState;
+#endif
+
+typedef void (*UdsSecurityStateSaveFn)(uint8_t failed_attempts, uint32_t lockout_remaining_ms,
+                                       void *context);
 
 typedef struct {
     uint8_t failed_attempts;
@@ -21,6 +33,8 @@ typedef struct {
     uint32_t lockout_until_ms;
     uint32_t initial_delay_ms;
     uint32_t initial_delay_until_ms;
+    UdsSecurityStateSaveFn persist_fn;
+    void *persist_context;
 } UdsSecurityGate;
 
 void uds_security_gate_init(UdsSecurityGate *gate, uint32_t now_ms);
@@ -35,5 +49,9 @@ void uds_security_gate_record_success(UdsSecurityGate *gate, uint8_t level);
 void uds_security_gate_grant_seed(UdsSecurityGate *gate, uint8_t level, uint32_t now_ms);
 void uds_security_gate_reset_session(UdsSecurityGate *gate);
 void uds_security_gate_reset_ecu(UdsSecurityGate *gate, uint32_t now_ms);
+void uds_security_gate_set_persistence(UdsSecurityGate *gate, UdsSecurityStateSaveFn persist_fn,
+                                       void *context);
+void uds_security_gate_restore_state(UdsSecurityGate *gate, uint8_t failed_attempts,
+                                     uint32_t lockout_remaining_ms, uint32_t now_ms);
 
 #endif /* UDS_SECURITY_GATE_H */

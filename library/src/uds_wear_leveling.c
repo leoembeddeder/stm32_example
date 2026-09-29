@@ -201,7 +201,7 @@ int uds_param_load(const UdsParamStore *store, void *data) {
 
 static int write_padded_chunked(const UdsParamStore *store, uint32_t addr, const uint8_t *src,
                                 uint16_t src_size, uint16_t total_size) {
-    uint8_t chunk[64];
+    uint8_t chunk[64] = {0};
     uint16_t written = 0U;
     while (written < total_size) {
         uint16_t to_write = (uint16_t)(total_size - written);

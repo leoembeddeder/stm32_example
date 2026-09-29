@@ -33,6 +33,7 @@ void uds_security_app_init(void);
 bool uds_security_app_provision_master_key(const uint8_t key[16]);
 void uds_security_app_set_key_provider(UdsSecurityKeyProviderFn provider);
 bool uds_security_app_has_provisioned_key(void);
+bool uds_security_app_is_provisioned(void);
 
 /* Hardware TRNG / Entropy Accumulator Interface */
 void uds_security_app_set_entropy_source(UdsEntropySourceFn source);

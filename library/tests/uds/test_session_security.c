@@ -214,7 +214,7 @@ static void test_security_immediate_ready_and_lockout(void) {
     configure(&server, 0U);
     enter_extended(&server, 0U);
     assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED_READY);
-    assert(!server.security_lockout_active);
+    assert(!server.security_gate.lockout_active);
     expect_seed(&server, 0U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
     expect_key(&server, 1U, UDS_SECURITY_SEND_KEY_LEVEL_1, true, 0U);
 
@@ -232,7 +232,7 @@ static void test_security_immediate_ready_and_lockout(void) {
                UDS_NRC_EXCEEDED_NUMBER_OF_ATTEMPTS);
     assert(uds_server_security_failed_attempts(&server) == 3U);
     assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKOUT);
-    assert(server.security_lockout_until_ms == 10105U);
+    assert(server.security_gate.lockout_until_ms == 10105U);
     expect_nrc(&server, 105U, seed, sizeof(seed), UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
     expect_nrc(&server, 106U,
                (const uint8_t[]){0x27U, UDS_SECURITY_SEND_KEY_LEVEL_1, 0x00U, 0x00U, 0x00U, 0x00U},
@@ -251,7 +251,7 @@ static void test_security_immediate_ready_and_lockout(void) {
 
     uds_server_apply_reset(&server, UDS_RESET_NORMAL, 20000U);
     assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED_READY);
-    assert(!server.security_lockout_active);
+    assert(!server.security_gate.lockout_active);
     enter_extended(&server, 20000U);
     expect_seed(&server, 20000U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
 

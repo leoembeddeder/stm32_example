@@ -242,9 +242,11 @@ static void test_flow_control_profile(bool can_fd) {
     assert(isotp_tx_feed_flow_control(&tx, &not_fc, 0U) == ISOTP_ERR_FORMAT);
     assert(isotp_tx_state(&tx) == ISOTP_TX_STATE_WAIT_FIRST_FLOW_CONTROL);
 
-    IsoTpCanFrame invalid_st_min = fc_frame(can_fd, 0x7E0U, ISOTP_FC_CTS, 2U, 0x80U);
-    assert(isotp_tx_feed_flow_control(&tx, &invalid_st_min, 0U) == ISOTP_ERR_FLOW_CONTROL);
-    assert(isotp_tx_state(&tx) == ISOTP_TX_STATE_IDLE);
+    IsoTpCanFrame reserved_st_min = fc_frame(can_fd, 0x7E0U, ISOTP_FC_CTS, 2U, 0x80U);
+    assert(isotp_tx_feed_flow_control(&tx, &reserved_st_min, 0U) == ISOTP_OK);
+    assert(tx.remote_st_min == 0x80U);
+    assert(tx.remote_st_min_us == 127000U);
+    assert(isotp_tx_state(&tx) == ISOTP_TX_STATE_SEND_CONSECUTIVE);
 
     start_long_transfer(&tx, &config, can_fd, &frame);
     IsoTpCanFrame cts = fc_frame(can_fd, 0x7E0U, ISOTP_FC_CTS, 2U, 0U);
@@ -598,6 +600,38 @@ static void test_strict_rx_dl_validation(void) {
     frame.dlc = 4U;
     frame.data[0] = 0x05U; /* SF length = 5, but frame DLC is only 4 (max payload = 3) */
     assert(isotp_rx_feed(&test_rx, &frame, 0U, &event) == ISOTP_ERR_FORMAT);
+
+    /* 5. Classic CAN: First Frame with DLC < 8 must return FORMAT error */
+    frame.dlc = 7U;
+    frame.data[0] = 0x10U;
+    frame.data[1] = 0x14U; /* FF declaring 20 bytes payload */
+    assert(isotp_rx_feed(&test_rx, &frame, 0U, &event) == ISOTP_ERR_FORMAT);
+
+    /* 6. Classic CAN: Non-final Consecutive Frame with DLC < 8 must return FORMAT error */
+    frame.dlc = 8U;
+    frame.data[0] = 0x10U;
+    frame.data[1] = 0x20U; /* FF declaring 32 bytes payload */
+    assert(isotp_rx_feed(&test_rx, &frame, 0U, &event) == ISOTP_NEED_FLOW_CONTROL);
+    frame.dlc = 6U; /* CF with sequence 1, but DLC = 6 (< 8 for non-final CF) */
+    frame.data[0] = 0x21U;
+    assert(isotp_rx_feed(&test_rx, &frame, 1U, &event) == ISOTP_ERR_FORMAT);
+}
+
+static void test_reserved_stmin_range(void) {
+    IsoTpTx tx;
+    IsoTpConfig config;
+    IsoTpCanFrame frame;
+    isotp_config_classic_can(&config);
+
+    const uint8_t test_values[] = {0x80U, 0xA0U, 0xF0U, 0xFAU, 0xFFU};
+    for (size_t i = 0; i < sizeof(test_values) / sizeof(test_values[0]); ++i) {
+        start_long_transfer(&tx, &config, false, &frame);
+        IsoTpCanFrame fc = fc_frame(false, 0x7E0U, ISOTP_FC_CTS, 0U, test_values[i]);
+        assert(isotp_tx_feed_flow_control(&tx, &fc, 0U) == ISOTP_OK);
+        assert(tx.remote_st_min == test_values[i]);
+        assert(tx.remote_st_min_us == 127000U);
+        assert(isotp_tx_state(&tx) == ISOTP_TX_STATE_SEND_CONSECUTIVE);
+    }
 }
 
 int main(void) {
@@ -620,5 +654,6 @@ int main(void) {
     test_microsecond_stmin();
     test_rx_flow_control_overflow();
     test_strict_rx_dl_validation();
+    test_reserved_stmin_range();
     return 0;
 }

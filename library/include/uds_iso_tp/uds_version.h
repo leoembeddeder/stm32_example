@@ -6,8 +6,8 @@
 
 #define UDS_VERSION_MAJOR 1U
 #define UDS_VERSION_MINOR 6U
-#define UDS_VERSION_PATCH 1U
-#define UDS_VERSION_STRING "1.6.1"
+#define UDS_VERSION_PATCH 2U
+#define UDS_VERSION_STRING "1.6.2"
 
 const char *uds_iso_tp_version(void);
 

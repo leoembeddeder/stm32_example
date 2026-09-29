@@ -2,6 +2,51 @@
 
 All notable changes to this project are documented here. Host validation and target compatibility remain dependent on the exact compiler, MCU, HAL revision, transceiver, and board configuration.
 
+## [1.6.2] - 2026-09-29
+
+### Security
+- **P0-1 Cryptographic Verification Fail-Closed (`boot_verify.c`)**:
+  - Removed hardcoded mock HMAC key from production builds.
+  - Implemented fail-closed signature verification policy requiring an explicit registered cryptographic verifier callback.
+  - Replaced variable-time `memcmp` with constant-time equality check `constant_time_equal()` for message authentication checks.
+- **P0-2 SecurityAccess Provisioning Enforcement (`uds_security_app.c`)**:
+  - Removed fallback NIST reference key from non-test builds.
+  - Added `uds_security_app_is_provisioned()` checking option bytes/NVM keys.
+  - Refused Level 2 seed requests on unprovisioned devices with `UDS_RESULT_DENIED` (NRC 0x22 / ConditionsNotCorrect).
+- **P0-3 Lockout State & Reset Bypass Elimination (`uds_security_gate.c`, `uds.c`)**:
+  - Unified `UdsSecurityGate` and `UdsServer`, eliminating duplicate security logic.
+  - Ensured failed attempt counter and lockout active state survive `0x11` ECU reset and power cycles.
+  - Enforced non-zero minimum lockout delay (clamped to 10,000 ms).
+  - Added persistence callback interface `uds_server_set_security_persistence()` and state restoration `uds_server_restore_security_state()`.
+- **P0-4 Monotonic Anti-Rollback Floor Restoration (`uds_bootloader.c`)**:
+  - Restored active firmware version floor from validated NVM metadata at boot.
+  - Added CRC-32 header integrity validation and format version checks before image acceptance or activation.
+- **P0-5 Fail-Closed Entropy Generation (`uds_security_app.c`)**:
+  - Refused seed generation when no true hardware TRNG or hardware entropy source is available.
+  - Propagated all entropy errors and removed discarded `(void)` return value casts.
+
+### Standards Conformance
+- **P1-1 ISO 15765-2 Reserved STmin Conformance (`isotp.c`)**:
+  - Mapped reserved STmin values (`0x80–0xF0`, `0xFA–0xFF`) to 127 ms (127,000 µs) per ISO 15765-2 Section 9.6.5.4 instead of aborting flow control.
+- **P1-3 ISO 15765-2 Classic CAN Frame Length Enforcement (`isotp.c`)**:
+  - Enforced full DLC (8 bytes) on Classic CAN First Frame (`ISOTP_ERR_FORMAT` if DLC < 8).
+  - Enforced full DLC (8 bytes) on all non-final Consecutive Frames on Classic CAN.
+- **P1-4 Metadata Format & CRC-32 Validation (`boot_verify.h`, `boot_verify.c`)**:
+  - Added `format_version`, `flags`, and `header_crc32` to `FirmwareMetadata_t` with 128-byte packed footprint preservation.
+- **P2-4 Unified Error Model (`uds.h`, `uds.c`)**:
+  - Exposed `uds_result_to_nrc()` with contract tests walking all `UdsCallbackResult` enum values.
+
+### Architecture & Verification
+- **P2-3 MCU Port Headers & Strict Warnings (`ports/`)**:
+  - Included `ports.h` across all 5 STM32 port files, resolving missing prototype warnings.
+  - Added `-Wmissing-prototypes` and `-Werror` flags to `uds_iso_tp_ports`.
+- **P3-1 Deep libFuzzer Penetration (`fuzz_uds_request.c`)**:
+  - Equipped UDS request fuzzer with in-memory service callbacks for DID read/write, security seed/key, routine control, and download/transfer.
+- **P3-3 CI Coverage HTML Artifact (`standalone-uds.yml`)**:
+  - Configured CI workflow to generate and upload `coverage-report` HTML artifact.
+- **P3-4 Static Analysis (`uds_wear_leveling.c`)**:
+  - Eliminated GCC analyzer uninitialized buffer note with zero-initialized staging chunk.
+
 ## [1.6.1] - 2026-09-28
 
 ### Added

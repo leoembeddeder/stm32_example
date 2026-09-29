@@ -724,6 +724,32 @@ static void test_uds_branches(void) {
     assert(uds_server_request_session(&server, UDS_SESSION_SAFETY, 1000U) == UDS_RESULT_DENIED);
 }
 
+static void test_uds_result_to_nrc_mapping(void) {
+    assert(uds_result_to_nrc(UDS_RESULT_OK) == UDS_NRC_CONDITIONS_NOT_CORRECT);
+    assert(uds_result_to_nrc(UDS_RESULT_NO_RESPONSE) == UDS_NRC_CONDITIONS_NOT_CORRECT);
+    assert(uds_result_to_nrc(UDS_RESULT_NOT_SUPPORTED) == UDS_NRC_SERVICE_NOT_SUPPORTED);
+    assert(uds_result_to_nrc(UDS_RESULT_SUBFUNCTION_NOT_SUPPORTED) ==
+           UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+    assert(uds_result_to_nrc(UDS_RESULT_DENIED) == UDS_NRC_CONDITIONS_NOT_CORRECT);
+    assert(uds_result_to_nrc(UDS_RESULT_OUT_OF_RANGE) == UDS_NRC_REQUEST_OUT_OF_RANGE);
+    assert(uds_result_to_nrc(UDS_RESULT_BUSY) == UDS_NRC_BUSY_REPEAT_REQUEST);
+    assert(uds_result_to_nrc(UDS_RESULT_SEQUENCE_ERROR) == UDS_NRC_REQUEST_SEQUENCE_ERROR);
+    assert(uds_result_to_nrc(UDS_RESULT_INVALID_KEY) == UDS_NRC_INVALID_KEY);
+    assert(uds_result_to_nrc(UDS_RESULT_ATTEMPTS_EXCEEDED) == UDS_NRC_EXCEEDED_NUMBER_OF_ATTEMPTS);
+    assert(uds_result_to_nrc(UDS_RESULT_DELAY_ACTIVE) == UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+    assert(uds_result_to_nrc(UDS_RESULT_PROGRAMMING_FAILURE) ==
+           UDS_NRC_GENERAL_PROGRAMMING_FAILURE);
+    assert(uds_result_to_nrc(UDS_RESULT_RESPONSE_TOO_LONG) == UDS_NRC_RESPONSE_TOO_LONG);
+    assert(uds_result_to_nrc(UDS_RESULT_RESPONSE_PENDING) ==
+           UDS_NRC_REQUEST_CORRECTLY_RECEIVED_RESPONSE_PENDING);
+    assert(uds_result_to_nrc(UDS_RESULT_INVALID_FORMAT) ==
+           UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT);
+    assert(uds_result_to_nrc(UDS_RESULT_SECURITY_DENIED) == UDS_NRC_SECURITY_ACCESS_DENIED);
+    assert(uds_result_to_nrc(UDS_RESULT_ERROR) == UDS_NRC_CONDITIONS_NOT_CORRECT);
+    /* Out-of-bounds value fallback */
+    assert(uds_result_to_nrc((UdsCallbackResult)99U) == UDS_NRC_CONDITIONS_NOT_CORRECT);
+}
+
 int main(void) {
     test_service_attributes();
     test_addressed_dispatch();
@@ -732,5 +758,6 @@ int main(void) {
     test_reentrant_multi_instance_servers();
     test_did_registry();
     test_uds_branches();
+    test_uds_result_to_nrc_mapping();
     return 0;
 }

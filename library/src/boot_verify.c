@@ -1,5 +1,6 @@
 #include "uds_iso_tp/boot_verify.h"
 #include "uds_iso_tp/sha256.h"
+#include <stddef.h>
 #include <string.h>
 
 static BootSignatureVerifierFn s_sig_verifier = NULL;
@@ -31,13 +32,21 @@ static bool verify_crc32_impl(const FirmwareMetadata_t *hdr, const uint8_t *imag
     return (computed_crc == hdr->crc32);
 }
 
+static bool constant_time_equal(const uint8_t *a, const uint8_t *b, size_t len) {
+    uint8_t diff = 0U;
+    for (size_t i = 0U; i < len; ++i) {
+        diff |= (uint8_t)(a[i] ^ b[i]);
+    }
+    return (diff == 0U);
+}
+
 static bool verify_sha256_impl(const FirmwareMetadata_t *hdr, const uint8_t *image, size_t len) {
     if ((hdr == NULL) || (image == NULL) || (len == 0U)) {
         return false;
     }
     uint8_t digest[32];
     sha256_hash(image, len, digest);
-    return (memcmp(digest, hdr->sha256, 32) == 0);
+    return constant_time_equal(digest, hdr->sha256, 32U);
 }
 
 static bool verify_signature_impl(const FirmwareMetadata_t *hdr, const uint8_t *image, size_t len) {
@@ -48,13 +57,8 @@ static bool verify_signature_impl(const FirmwareMetadata_t *hdr, const uint8_t *
         return false;
     }
     if (s_sig_verifier == NULL) {
-        /* Default signature validator checks if signature matches mock HMAC manifest */
-        uint8_t expected_sig[64];
-        (void)memset(expected_sig, 0, sizeof(expected_sig));
-        const uint8_t mock_key[16] = {0x53, 0x45, 0x43, 0x55, 0x52, 0x45, 0x5f, 0x42,
-                                      0x4f, 0x4f, 0x54, 0x5f, 0x4b, 0x45, 0x59, 0x31};
-        hmac_sha256(mock_key, sizeof(mock_key), hdr->sha256, 32U, expected_sig);
-        return (memcmp(expected_sig, hdr->signature, 64) == 0);
+        /* Fail-closed: signature policy strictly requires a registered cryptographic verifier */
+        return false;
     }
     return s_sig_verifier(hdr->sha256, hdr->signature);
 }
@@ -98,4 +102,30 @@ bool boot_verify_image(const FirmwareMetadata_t *hdr, const uint8_t *image, size
         return false;
     }
     return policy->verify(hdr, image, len);
+}
+
+uint32_t boot_calc_metadata_crc(const FirmwareMetadata_t *hdr) {
+    if (hdr == NULL) {
+        return 0U;
+    }
+    return boot_calc_crc32((const uint8_t *)hdr, offsetof(FirmwareMetadata_t, header_crc32));
+}
+
+bool boot_validate_metadata(const FirmwareMetadata_t *hdr) {
+    if (hdr == NULL) {
+        return false;
+    }
+    if (hdr->magic != UDS_BL_METADATA_MAGIC) {
+        return false;
+    }
+    if ((hdr->format_version != 0U) || (hdr->header_crc32 != 0U)) {
+        if (hdr->format_version != UDS_BL_METADATA_FORMAT_VERSION) {
+            return false;
+        }
+        uint32_t expected_crc = boot_calc_metadata_crc(hdr);
+        if (hdr->header_crc32 != expected_crc) {
+            return false;
+        }
+    }
+    return true;
 }

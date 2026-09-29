@@ -75,6 +75,7 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
 endif()
 
 if(UDS_ISO_TP_BUILD_TESTS)
+    add_compile_definitions(UDS_ISO_TP_TESTING=1)
     enable_testing()
     add_executable(uds_iso_tp_isotp_test tests/isotp/test_isotp.c)
     target_link_libraries(uds_iso_tp_isotp_test PRIVATE uds_iso_tp_isotp)
@@ -278,7 +279,7 @@ if(UDS_ISO_TP_BUILD_TESTS)
     target_include_directories(uds_iso_tp_ports PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/../ports/include)
     target_compile_options(uds_iso_tp_ports PRIVATE
-        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+        -Wall -Wextra -Wpedantic -Wconversion -Wmissing-prototypes -Werror)
 
     add_executable(uds_iso_tp_ports_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/test_ports.c)

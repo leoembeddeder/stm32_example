@@ -385,7 +385,7 @@ static void test_iso_0x23_examples_and_nrc(void) {
     assert(response[0] == 0x7FU && response[1] == 0x23U && response[2] == 0x33U);
 
     /* Mock unlock security */
-    server.security_level = 1U;
+    server.security_gate.active_level = 1U;
     s_secure_buffer[0] = 0xDEU;
     s_secure_buffer[1] = 0xADU;
     s_secure_buffer[2] = 0xBEU;
@@ -396,7 +396,7 @@ static void test_iso_0x23_examples_and_nrc(void) {
     assert(response[0] == 0x63U && resp_len == 5U);
     assert(response[1] == 0xDEU && response[2] == 0xADU && response[3] == 0xBEU &&
            response[4] == 0xEFU);
-    server.security_level = 0U;
+    server.security_gate.active_level = 0U;
 
     /* 12. Session check: in Default Session (0x01) -> NRC 0x7F */
     assert(uds_server_request_session(&server, UDS_SESSION_DEFAULT, 1000U) == UDS_RESULT_OK);
@@ -517,13 +517,13 @@ static void test_iso_0x3D_examples_and_nrc(void) {
     assert(response[0] == 0x7FU && response[1] == 0x3DU && response[2] == 0x33U);
 
     /* Unlock and write */
-    server.security_level = 1U;
+    server.security_gate.active_level = 1U;
     assert(uds_server_handle_addressed(&server, req_sec_write, sizeof(req_sec_write), response,
                                        &resp_len, sizeof(response), UDS_ADDRESS_PHYSICAL,
                                        1000U) == UDS_RESULT_OK);
     assert(response[0] == 0x7DU);
     assert(s_secure_buffer[0] == 0x11U && s_secure_buffer[1] == 0x22U);
-    server.security_level = 0U;
+    server.security_gate.active_level = 0U;
 
     /* 9. NRC 0x22: Write to programming-only Flash region in Extended session */
     uint8_t req_flash_write[] = {0x3DU, 0x14U, 0x08U, 0x00U, 0x00U, 0x00U, 0x02U, 0x55U, 0xAAU};
@@ -612,7 +612,7 @@ static void test_uds_memory_app_integration(void) {
     assert(response[0] == 0x7FU && response[1] == 0x23U && response[2] == 0x33U);
 
     /* Unlock security */
-    server.security_level = 1U;
+    server.security_gate.active_level = 1U;
     assert(uds_server_handle_addressed(&server, req_read_nvm, sizeof(req_read_nvm), response,
                                        &resp_len, sizeof(response), UDS_ADDRESS_PHYSICAL,
                                        1000U) == UDS_RESULT_OK);

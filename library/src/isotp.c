@@ -65,11 +65,18 @@ static void clear_frame(IsoTpCanFrame *frame, uint32_t id, const IsoTpConfig *co
 }
 
 static bool valid_st_min(uint8_t value) {
-    return (value <= 0x7FU) || ((value >= 0xF1U) && (value <= 0xF9U));
+    (void)value;
+    return true;
 }
 
 static uint32_t st_min_ms(uint8_t value) {
-    return (value <= 0x7FU) ? (uint32_t)value : 1U;
+    if (value <= 0x7FU) {
+        return (uint32_t)value;
+    }
+    if ((value >= 0xF1U) && (value <= 0xF9U)) {
+        return 1U;
+    }
+    return 127U;
 }
 
 static uint32_t st_min_us(uint8_t value) {
@@ -79,7 +86,7 @@ static uint32_t st_min_us(uint8_t value) {
     if ((value >= 0xF1U) && (value <= 0xF9U)) {
         return (uint32_t)(value - 0xF0U) * 100U;
     }
-    return 0U;
+    return 127000U;
 }
 
 void isotp_config_classic_can(IsoTpConfig *config) {
@@ -223,6 +230,9 @@ static IsoTpStatus rx_first(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t no
     if (frame->dlc < 2U) {
         return ISOTP_ERR_FORMAT;
     }
+    if (!rx->config.can_fd && (frame->dlc < 8U)) {
+        return ISOTP_ERR_FORMAT;
+    }
     uint32_t length = 0U;
     uint8_t header = 0U;
     if (!decode_ff(frame, &length, &header) || (length <= 7U)) {
@@ -256,9 +266,19 @@ static IsoTpStatus rx_consecutive(IsoTpRx *rx, const IsoTpCanFrame *frame, uint3
     if (!rx->active) {
         return ISOTP_ERR_STATE;
     }
+    if (frame->dlc < 1U) {
+        return ISOTP_ERR_FORMAT;
+    }
     if ((uint8_t)(frame->data[0] & 0x0FU) != rx->next_sequence) {
         isotp_rx_reset(rx);
         return ISOTP_ERR_SEQUENCE;
+    }
+    if (!rx->config.can_fd) {
+        uint32_t remaining = rx->expected_len - rx->received_len;
+        if ((remaining > (uint32_t)(frame->dlc - 1U)) && (frame->dlc < 8U)) {
+            isotp_rx_reset(rx);
+            return ISOTP_ERR_FORMAT;
+        }
     }
     uint32_t copy_len = min_u32((uint32_t)frame->dlc - 1U, rx->expected_len - rx->received_len);
     for (uint32_t index = 0U; index < copy_len; ++index) {

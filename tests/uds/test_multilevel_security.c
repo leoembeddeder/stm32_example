@@ -70,8 +70,20 @@ static void test_direct_security_app_level2(void) {
 
     uint8_t seed[UDS_SECURITY_APP_LEVEL2_SEED_LEN] = {0U};
     uint16_t seed_len = 0U;
+    uint8_t key[UDS_SECURITY_APP_LEVEL2_KEY_LEN] = {0U};
 
-    /* Capacity check */
+    /* Unprovisioned check: seed request denied and key calculation fails */
+    assert(!uds_security_app_is_provisioned());
+    assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, sizeof(seed)) ==
+           UDS_RESULT_DENIED);
+    assert(!uds_security_app_calculate_key_level2(seed, key));
+
+    /* Capacity check when provisioned */
+    const uint8_t test_master_key[16] = {0x2BU, 0x7EU, 0x15U, 0x16U, 0x28U, 0xAEU, 0xD2U, 0xA6U,
+                                         0xABU, 0xF7U, 0x15U, 0x88U, 0x09U, 0xCFU, 0x4FU, 0x3CU};
+    assert(uds_security_app_provision_master_key(test_master_key));
+    assert(uds_security_app_is_provisioned());
+
     assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, 15U) ==
            UDS_RESULT_RESPONSE_TOO_LONG);
 
@@ -81,7 +93,6 @@ static void test_direct_security_app_level2(void) {
     assert(seed_len == 16U);
 
     /* Compute Level 2 key (AES-CMAC-128) */
-    uint8_t key[UDS_SECURITY_APP_LEVEL2_KEY_LEN] = {0U};
     assert(uds_security_app_calculate_key_level2(seed, key));
 
     /* Verify with wrong key length */
@@ -180,8 +191,20 @@ static void test_server_multilevel_security_access(void) {
     assert(response[2] == 0x00U && response[3] == 0x00U && response[4] == 0x00U &&
            response[5] == 0x00U);
 
-    /* 5. Level 2 Flow: Request Seed (0x27 0x03) */
+    /* 5. Level 2 Flow: Request Seed when unprovisioned (0x27 0x03) */
     uint8_t req_seed_l2[] = {0x27U, 0x03U};
+    assert(uds_server_handle(&server, req_seed_l2, sizeof(req_seed_l2), response, &resp_len,
+                             sizeof(response), 55U) == UDS_RESULT_OK);
+    assert(response[0] == 0x7FU && response[1] == 0x27U &&
+           response[2] == UDS_NRC_CONDITIONS_NOT_CORRECT);
+
+    /* Now provision master key */
+    const uint8_t prov_key[16] = {0x2BU, 0x7EU, 0x15U, 0x16U, 0x28U, 0xAEU, 0xD2U, 0xA6U,
+                                  0xABU, 0xF7U, 0x15U, 0x88U, 0x09U, 0xCFU, 0x4FU, 0x3CU};
+    assert(uds_security_app_provision_master_key(prov_key));
+    assert(uds_security_app_is_provisioned());
+
+    /* Request Seed (0x27 0x03) now succeeds */
     assert(uds_server_handle(&server, req_seed_l2, sizeof(req_seed_l2), response, &resp_len,
                              sizeof(response), 60U) == UDS_RESULT_OK);
     assert(resp_len == (2U + UDS_SECURITY_APP_LEVEL2_SEED_LEN));
@@ -304,11 +327,24 @@ static bool mock_key_provider(uint8_t level, const uint8_t *seed, uint8_t *key_o
 static void test_key_provisioning_and_entropy(void) {
     uds_security_app_init();
     assert(!uds_security_app_has_provisioned_key());
+    assert(!uds_security_app_is_provisioned());
 
-    /* 1. Test entropy source injection */
-    uds_security_app_set_entropy_source(mock_entropy_source);
     uint8_t seed[UDS_SECURITY_APP_LEVEL2_SEED_LEN] = {0U};
     uint16_t seed_len = 0U;
+
+    /* Unprovisioned check: seed request denied */
+    assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, sizeof(seed)) ==
+           UDS_RESULT_DENIED);
+
+    /* 1. Test master key provisioning */
+    const uint8_t custom_master_key[16] = {0x01U, 0x12U, 0x23U, 0x34U, 0x45U, 0x56U, 0x67U, 0x78U,
+                                           0x89U, 0x9AU, 0xABU, 0xBCU, 0xCDU, 0xDEU, 0xEFU, 0xF0U};
+    assert(uds_security_app_provision_master_key(custom_master_key));
+    assert(uds_security_app_has_provisioned_key());
+    assert(uds_security_app_is_provisioned());
+
+    /* 2. Test entropy source injection */
+    uds_security_app_set_entropy_source(mock_entropy_source);
     assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, sizeof(seed)) ==
            UDS_RESULT_OK);
     assert(seed_len == 16U);
@@ -316,12 +352,6 @@ static void test_key_provisioning_and_entropy(void) {
 
     /* Reset entropy source back to default CSPRNG */
     uds_security_app_set_entropy_source(NULL);
-
-    /* 2. Test master key provisioning */
-    const uint8_t custom_master_key[16] = {0x01U, 0x12U, 0x23U, 0x34U, 0x45U, 0x56U, 0x67U, 0x78U,
-                                           0x89U, 0x9AU, 0xABU, 0xBCU, 0xCDU, 0xDEU, 0xEFU, 0xF0U};
-    assert(uds_security_app_provision_master_key(custom_master_key));
-    assert(uds_security_app_has_provisioned_key());
 
     uint8_t key_provisioned[16] = {0U};
     assert(uds_security_app_calculate_key_level2(seed, key_provisioned));

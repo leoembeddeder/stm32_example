@@ -81,7 +81,10 @@ static void bootloader_nvm_save_metadata(const FirmwareMetadata_t *meta) {
 #if defined(HAL_FLASH_MODULE_ENABLED)
     (void)meta;
 #else
-    (void)memcpy(s_mock_nvm_storage, meta, sizeof(FirmwareMetadata_t));
+    FirmwareMetadata_t copy = *meta;
+    copy.format_version = UDS_BL_METADATA_FORMAT_VERSION;
+    copy.header_crc32 = boot_calc_metadata_crc(&copy);
+    (void)memcpy(s_mock_nvm_storage, &copy, sizeof(FirmwareMetadata_t));
     s_mock_nvm_valid = true;
 #endif
 }
@@ -97,7 +100,7 @@ static bool bootloader_nvm_load_metadata(FirmwareMetadata_t *meta) {
         return false;
     }
     (void)memcpy(meta, s_mock_nvm_storage, sizeof(FirmwareMetadata_t));
-    return (meta->magic == UDS_BL_METADATA_MAGIC);
+    return boot_validate_metadata(meta);
 #endif
 }
 
@@ -559,6 +562,7 @@ void uds_bootloader_init(void) {
     FirmwareMetadata_t loaded_meta;
     if (bootloader_nvm_load_metadata(&loaded_meta)) {
         s_bl_ctx.staging_metadata = loaded_meta;
+        s_bl_ctx.active_version = loaded_meta.version;
         if (loaded_meta.status == (uint8_t)UDS_BL_SLOT_ACTIVE) {
             s_bl_ctx.staging_metadata.boot_attempts =
                 (uint8_t)(s_bl_ctx.staging_metadata.boot_attempts + 1U);
@@ -773,7 +777,7 @@ static UdsCallbackResult routine_check_memory(uint8_t subfunction, const uint8_t
     FirmwareMetadata_t temp_meta;
     parse_check_memory_metadata(in, in_len, &temp_meta, &meta);
 
-    if (meta->magic != UDS_BL_METADATA_MAGIC) {
+    if (!boot_validate_metadata(meta)) {
         s_bl_ctx.last_check_memory_result = 0x01U;
         out[0] = 0x01U;
         *out_len = 1U;

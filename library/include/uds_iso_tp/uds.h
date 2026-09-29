@@ -163,12 +163,15 @@ typedef enum {
     UDS_SESSION_TRANSITION_ALLOWED = 1
 } UdsSessionTransitionResult;
 
+#ifndef UDS_SECURITY_STATE_DEFINED
+#define UDS_SECURITY_STATE_DEFINED
 typedef enum {
     UDS_SECURITY_STATE_LOCKED_READY = 0,
     UDS_SECURITY_STATE_WAITING_FOR_KEY,
     UDS_SECURITY_STATE_UNLOCKED,
     UDS_SECURITY_STATE_LOCKOUT
 } UdsSecurityState;
+#endif
 
 /* Source-compatible aliases for applications using the pre-1.2 names. */
 #define UDS_SECURITY_STATE_LOCKED UDS_SECURITY_STATE_LOCKED_READY
@@ -203,6 +206,8 @@ typedef enum {
     UDS_RESULT_SECURITY_DENIED,
     UDS_RESULT_ERROR
 } UdsCallbackResult;
+
+#include "uds_iso_tp/uds_security_gate.h"
 
 typedef UdsCallbackResult (*UdsReadDidFn)(void *context, uint16_t did, uint8_t *data,
                                           uint16_t *length, uint16_t capacity);
@@ -262,22 +267,7 @@ typedef struct {
     UdsCallbacks callbacks;
     void *context;
     uint8_t session;
-    uint8_t security_level;
-    UdsSecurityState security_state;
-    uint8_t security_failed_attempts;
-    uint8_t security_max_attempts;
-    uint8_t security_seed_level;
-    /* Deprecated compatibility fields; startup delay is never active or evaluated. */
-    uint32_t security_initial_delay_until_ms;
-    uint32_t security_initial_delay_ms;
-    uint32_t security_lockout_until_ms;
-    uint32_t security_seed_expiry_ms;
-    uint32_t security_lockout_ms;
-    uint32_t security_seed_timeout_ms;
-    bool security_initial_delay_active;
-    bool security_lockout_active;
-    bool security_seed_timer_active;
-    bool security_seed_valid;
+    UdsSecurityGate security_gate;
     UdsResetReason pending_reset_reason;
     uint8_t pending_reset_subfunction;
     uint8_t next_download_block;
@@ -324,6 +314,11 @@ bool uds_server_security_seed_valid(const UdsServer *server);
 void uds_server_set_timing(UdsServer *server, uint32_t s3_timeout_ms,
                            uint32_t security_initial_delay_ms, uint32_t security_lockout_ms,
                            uint32_t security_seed_timeout_ms, uint8_t security_max_attempts);
+void uds_server_set_security_persistence(UdsServer *server, UdsSecurityStateSaveFn persist_fn,
+                                         void *context);
+void uds_server_restore_security_state(UdsServer *server, uint8_t failed_attempts,
+                                       uint32_t lockout_remaining_ms, uint32_t now_ms);
+uint8_t uds_result_to_nrc(UdsCallbackResult result);
 const UdsServer *uds_server_get_current(void);
 
 #endif

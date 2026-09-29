@@ -40,12 +40,24 @@ static void test_c092_security_level2_cmac(void) {
 
     uint8_t seed[UDS_SECURITY_APP_LEVEL2_SEED_LEN] = {0U};
     uint16_t seed_len = 0U;
+    uint8_t key[UDS_SECURITY_APP_LEVEL2_KEY_LEN] = {0U};
+
+    /* Unprovisioned check: seed request denied */
+    assert(!uds_security_app_is_provisioned());
+    assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, sizeof(seed)) ==
+           UDS_RESULT_DENIED);
+    assert(!uds_security_app_calculate_key_level2(seed, key));
+
+    /* Provision master key */
+    const uint8_t prov_key[16] = {0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U, 0x08U,
+                                  0x09U, 0x0AU, 0x0BU, 0x0CU, 0x0DU, 0x0EU, 0x0FU, 0x10U};
+    assert(uds_security_app_provision_master_key(prov_key));
+    assert(uds_security_app_is_provisioned());
 
     assert(uds_security_app_seed(NULL, UDS_SECURITY_LEVEL_2, seed, &seed_len, sizeof(seed)) ==
            UDS_RESULT_OK);
     assert(seed_len == 16U);
 
-    uint8_t key[UDS_SECURITY_APP_LEVEL2_KEY_LEN] = {0U};
     assert(uds_security_app_calculate_key_level2(seed, key));
     assert(uds_security_app_key(NULL, UDS_SECURITY_LEVEL_2, key, sizeof(key)) == UDS_RESULT_OK);
 }

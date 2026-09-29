@@ -17,11 +17,6 @@ static bool s_has_provisioned_key = false;
 static UdsSecurityKeyProviderFn s_custom_key_provider = NULL;
 static UdsEntropySourceFn s_custom_entropy_source = NULL;
 
-/* Reference fallback key for regression testing when unprovisioned (NIST AES key) */
-static const uint8_t s_default_reference_key[16] = {0x2BU, 0x7EU, 0x15U, 0x16U, 0x28U, 0xAEU,
-                                                    0xD2U, 0xA6U, 0xABU, 0xF7U, 0x15U, 0x88U,
-                                                    0x09U, 0xCFU, 0x4FU, 0x3CU};
-
 static uint8_t s_level1_active_seed[UDS_SECURITY_APP_LEVEL1_SEED_LEN];
 static bool s_level1_seed_valid = false;
 
@@ -64,6 +59,7 @@ static bool csprng_generate_bytes(uint8_t *output, size_t length) {
     if (uds_platform_trng_get_random(output, length)) {
         return true;
     }
+#if defined(UDS_ISO_TP_TESTING)
     uint32_t systick = uds_platform_systick_val();
     csprng_accumulate_entropy(systick);
 
@@ -75,6 +71,10 @@ static bool csprng_generate_bytes(uint8_t *output, size_t length) {
         generated += chunk;
     }
     return true;
+#else
+    /* Fail closed: without hardware TRNG or registered entropy source, refuse seed generation */
+    return false;
+#endif
 }
 
 bool uds_security_app_provision_master_key(const uint8_t key[16]) {
@@ -94,6 +94,10 @@ bool uds_security_app_has_provisioned_key(void) {
     return s_has_provisioned_key;
 }
 
+bool uds_security_app_is_provisioned(void) {
+    return s_has_provisioned_key || (s_custom_key_provider != NULL);
+}
+
 void uds_security_app_set_entropy_source(UdsEntropySourceFn source) {
     s_custom_entropy_source = source;
 }
@@ -109,6 +113,9 @@ static uint8_t constant_time_equal_4(const uint8_t left[4], const uint8_t right[
 void uds_security_app_init(void) {
     s_level1_seed_valid = false;
     s_level2_seed_valid = false;
+    s_has_provisioned_key = false;
+    s_custom_key_provider = NULL;
+    s_custom_entropy_source = NULL;
     (void)memset(s_level1_active_seed, 0, sizeof(s_level1_active_seed));
     (void)memset(s_level2_active_seed, 0, sizeof(s_level2_active_seed));
     uint32_t initial_entropy = uds_platform_systick_val();
@@ -133,9 +140,10 @@ bool uds_security_app_calculate_key_level2(const uint8_t seed[16], uint8_t key[1
     if (s_custom_key_provider != NULL) {
         return s_custom_key_provider(2U, seed, key);
     }
-    const uint8_t *master_key =
-        s_has_provisioned_key ? s_provisioned_master_key : s_default_reference_key;
-    return uds_security_cmac_derive_key(master_key, seed, key);
+    if (!s_has_provisioned_key) {
+        return false;
+    }
+    return uds_security_cmac_derive_key(s_provisioned_master_key, seed, key);
 }
 
 UdsCallbackResult uds_security_app_seed(void *context, uint8_t level, uint8_t *seed,
@@ -149,7 +157,9 @@ UdsCallbackResult uds_security_app_seed(void *context, uint8_t level, uint8_t *s
         if (capacity < UDS_SECURITY_APP_LEVEL1_SEED_LEN) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        (void)csprng_generate_bytes(s_level1_active_seed, UDS_SECURITY_APP_LEVEL1_SEED_LEN);
+        if (!csprng_generate_bytes(s_level1_active_seed, UDS_SECURITY_APP_LEVEL1_SEED_LEN)) {
+            return UDS_RESULT_ERROR;
+        }
         if ((s_level1_active_seed[0] | s_level1_active_seed[1] | s_level1_active_seed[2] |
              s_level1_active_seed[3]) == 0U) {
             s_level1_active_seed[0] = 0xA5U;
@@ -163,10 +173,15 @@ UdsCallbackResult uds_security_app_seed(void *context, uint8_t level, uint8_t *s
     }
 
     if (level == UDS_SECURITY_LEVEL_2) {
+        if (!uds_security_app_is_provisioned()) {
+            return UDS_RESULT_DENIED;
+        }
         if (capacity < UDS_SECURITY_APP_LEVEL2_SEED_LEN) {
             return UDS_RESULT_RESPONSE_TOO_LONG;
         }
-        (void)csprng_generate_bytes(s_level2_active_seed, UDS_SECURITY_APP_LEVEL2_SEED_LEN);
+        if (!csprng_generate_bytes(s_level2_active_seed, UDS_SECURITY_APP_LEVEL2_SEED_LEN)) {
+            return UDS_RESULT_ERROR;
+        }
         bool all_zero = true;
         for (uint8_t i = 0U; i < UDS_SECURITY_APP_LEVEL2_SEED_LEN; ++i) {
             if (s_level2_active_seed[i] != 0U) {
