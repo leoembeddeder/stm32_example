@@ -39,6 +39,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     library/src/uds_wear_leveling.c
     library/src/uds_flash_fsm.c
     library/src/uds_security_gate.c
+    library/src/uds_security_nvm.c
+    library/src/boot_floor.c
     library/src/boot_verify.c
     library/crypto/aes.c
     library/crypto/aes_cmac.c

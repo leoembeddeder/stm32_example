@@ -62,6 +62,8 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
         src/uds_wear_leveling.c
         src/uds_flash_fsm.c
         src/uds_security_gate.c
+        src/uds_security_nvm.c
+        src/boot_floor.c
         src/boot_verify.c
         crypto/sha256.c)
     target_include_directories(uds_iso_tp_c99_portability PRIVATE
