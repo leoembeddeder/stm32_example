@@ -45,6 +45,52 @@ static bool custom_mock_verifier(const uint8_t *digest32, const uint8_t *signatu
     return (signature64[0] == digest32[0]);
 }
 
+static uint8_t s_expected_manifest[32];
+static bool exact_manifest_verifier(const uint8_t *digest32, const uint8_t *signature64) {
+    (void)signature64;
+    return (memcmp(digest32, s_expected_manifest, 32U) == 0);
+}
+
+/* Relabelling an old signed image with a higher version must invalidate the signature. */
+static void test_signature_covers_version_size_flags(void) {
+    const uint8_t image[32] = "signed image bytes for manifest";
+    FirmwareMetadata_t hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    hdr.magic = UDS_BL_METADATA_MAGIC;
+    hdr.version = 5U;
+    hdr.image_size = (uint32_t)sizeof(image);
+    sha256_hash(image, sizeof(image), hdr.sha256);
+    boot_finalize_metadata(&hdr);
+    boot_manifest_digest(&hdr, s_expected_manifest); /* what the OEM signed */
+
+    boot_verify_set_policy(boot_verify_policy_signature());
+    boot_verify_set_signature_verifier(exact_manifest_verifier);
+    assert(boot_verify_image(&hdr, image, sizeof(image)) == true);
+
+    FirmwareMetadata_t forged = hdr;
+    forged.version = 99U; /* attacker relabels the same signed bytes as a newer release */
+    boot_finalize_metadata(&forged);
+    assert(boot_verify_image(&forged, image, sizeof(image)) == false);
+
+    forged = hdr;
+    forged.image_size += 1U;
+    assert(boot_verify_image(&forged, image, sizeof(image)) == false);
+
+    forged = hdr;
+    forged.flags = 0x0001U;
+    assert(boot_verify_image(&forged, image, sizeof(image)) == false);
+
+    /* Runtime-mutable fields are NOT part of the manifest, so slot bookkeeping still works. */
+    forged = hdr;
+    forged.status = 3U;
+    forged.boot_attempts = 2U;
+    forged.active_slot = 1U;
+    assert(boot_verify_image(&forged, image, sizeof(image)) == true);
+
+    boot_verify_set_signature_verifier(NULL);
+    boot_verify_set_policy(NULL);
+}
+
 static void test_signature_policy(void) {
     const uint8_t image[64] = "Cryptographically Signed Bootloader Application Image";
     FirmwareMetadata_t hdr;
@@ -64,13 +110,15 @@ static void test_signature_policy(void) {
     boot_verify_set_signature_verifier(NULL);
     assert(boot_verify_image(&hdr, image, sizeof(image)) == false);
 
-    /* Test custom signature verifier callback */
+    /* Test custom signature verifier callback: it now receives the manifest digest */
     boot_verify_set_signature_verifier(custom_mock_verifier);
-    hdr.signature[0] = hdr.sha256[0];
+    uint8_t manifest[32];
+    boot_manifest_digest(&hdr, manifest);
+    hdr.signature[0] = manifest[0];
     assert(boot_verify_image(&hdr, image, sizeof(image)) == true);
 
     /* Invalid signature rejected */
-    hdr.signature[0] = (uint8_t)(hdr.sha256[0] ^ 0xFFU);
+    hdr.signature[0] = (uint8_t)(manifest[0] ^ 0xFFU);
     assert(boot_verify_image(&hdr, image, sizeof(image)) == false);
 
     /* Signature verification when SHA256 digest fails */
@@ -118,6 +166,8 @@ static void test_metadata_validation(void) {
     FirmwareMetadata_t legacy_hdr;
     memset(&legacy_hdr, 0, sizeof(legacy_hdr));
     legacy_hdr.magic = UDS_BL_METADATA_MAGIC;
+    assert(boot_validate_metadata(&legacy_hdr) == false); /* no legacy bypass any more */
+    boot_finalize_metadata(&legacy_hdr);
     assert(boot_validate_metadata(&legacy_hdr) == true);
 
     assert(boot_calc_metadata_crc(NULL) == 0U);
@@ -162,6 +212,7 @@ int main(void) {
     test_crc32_policy();
     test_sha256_policy();
     test_signature_policy();
+    test_signature_covers_version_size_flags();
     test_metadata_validation();
     test_null_guards_and_edge_cases();
     printf("Pluggable BootIntegrityPolicy tests passed successfully.\n");

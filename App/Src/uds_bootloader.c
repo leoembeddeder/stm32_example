@@ -62,10 +62,15 @@ static const uint8_t *bootloader_get_slot_ptr(uint32_t address, size_t *avail_le
 #endif
 }
 
+#if defined(UDS_ISO_TP_TESTING)
+/* Test-only symmetric key. Production builds MUST register a real verifier
+ * (asymmetric, key in protected memory) with uds_bootloader_set_signature_verifier(). */
 static const uint8_t s_oem_root_pubkey[16] = {0xD4U, 0x51U, 0x86U, 0x93U, 0xB6U, 0xA2U,
                                               0x54U, 0x07U, 0x38U, 0x8BU, 0x22U, 0xF6U,
                                               0x1BU, 0x8CU, 0x0DU, 0x48U};
+#endif
 
+static UdsBootFloor *s_floor_store = NULL;
 static UdsBootloaderSignatureVerifierFn s_signature_verifier = NULL;
 static bool s_signature_required = true;
 
@@ -104,6 +109,19 @@ static bool bootloader_nvm_load_metadata(FirmwareMetadata_t *meta) {
 #endif
 }
 
+void uds_bootloader_set_floor_store(UdsBootFloor *floor_store) {
+    s_floor_store = floor_store;
+}
+
+uint32_t uds_bootloader_get_version_floor(void) {
+    uint32_t floor = s_bl_ctx.active_version;
+    if (s_floor_store != NULL) {
+        const uint32_t persisted = boot_floor_get(s_floor_store);
+        floor = (persisted > floor) ? persisted : floor;
+    }
+    return floor;
+}
+
 void uds_bootloader_set_signature_verifier(UdsBootloaderSignatureVerifierFn verifier) {
     s_signature_verifier = verifier;
 }
@@ -120,6 +138,7 @@ UdsBootloaderVerifyMode uds_bootloader_get_verification_mode(void) {
     return s_bl_ctx.verify_mode;
 }
 
+#if defined(UDS_ISO_TP_TESTING)
 void uds_bootloader_calculate_manifest_signature(const uint8_t digest32[32],
                                                  uint8_t signature64[64]) {
     if ((digest32 == NULL) || (signature64 == NULL)) {
@@ -134,6 +153,8 @@ void uds_bootloader_calculate_manifest_signature(const uint8_t digest32[32],
     hmac_sha256(tag_key, sizeof(tag_key), &signature64[0], 32U, &signature64[32]);
 }
 
+#endif
+
 bool uds_bootloader_verify_signature(const uint8_t digest32[32], const uint8_t signature64[64]) {
     if ((digest32 == NULL) || (signature64 == NULL)) {
         return false;
@@ -141,6 +162,10 @@ bool uds_bootloader_verify_signature(const uint8_t digest32[32], const uint8_t s
     if (s_signature_verifier != NULL) {
         return s_signature_verifier(digest32, signature64);
     }
+#if !defined(UDS_ISO_TP_TESTING)
+    /* Fail closed: no verifier registered means no image is authentic. */
+    return false;
+#else
     uint8_t expected_sig[64];
     uds_bootloader_calculate_manifest_signature(digest32, expected_sig);
     uint8_t diff = 0U;
@@ -148,6 +173,7 @@ bool uds_bootloader_verify_signature(const uint8_t digest32[32], const uint8_t s
         diff |= (uint8_t)(signature64[i] ^ expected_sig[i]);
     }
     return (diff == 0U);
+#endif
 }
 
 UdsBootloaderSlotStatus uds_bootloader_get_slot_status(void) {
@@ -157,6 +183,11 @@ UdsBootloaderSlotStatus uds_bootloader_get_slot_status(void) {
 UdsDownloadResult uds_bootloader_confirm_active_image(void) {
     if (s_bl_ctx.staging_metadata.status != (uint8_t)UDS_BL_SLOT_ACTIVE) {
         return UDS_DOWNLOAD_SEQUENCE_ERROR;
+    }
+    /* Raise the persistent floor FIRST: if it cannot be stored we do not confirm. */
+    if ((s_floor_store != NULL) &&
+        !boot_floor_raise(s_floor_store, s_bl_ctx.staging_metadata.version)) {
+        return UDS_DOWNLOAD_PROGRAM_ERROR;
     }
     s_bl_ctx.staging_metadata.status = (uint8_t)UDS_BL_SLOT_CONFIRMED;
     s_bl_ctx.staging_metadata.boot_attempts = 0U;
@@ -397,6 +428,31 @@ UdsDownloadResult uds_bootloader_flash_erase_poll(void) {
     return bootloader_flash_erase_poll(NULL);
 }
 
+/* Verify what was actually copied into slot A, using the same range (payload after the 128-byte
+ * header) and the same primitive that CheckMemory used. Fail closed: no hash/CRC, no activation. */
+static UdsDownloadResult c092_verify_copied_image(const uint8_t *copied, uint32_t image_size) {
+    if (image_size <= sizeof(FirmwareMetadata_t)) {
+        return UDS_DOWNLOAD_VERIFY_ERROR;
+    }
+    const uint8_t *payload = &copied[sizeof(FirmwareMetadata_t)];
+    const size_t payload_len = (size_t)(image_size - sizeof(FirmwareMetadata_t));
+    if (s_bl_ctx.verify_mode == UDS_BL_VERIFY_MODE_CRC32) {
+        if ((s_bl_ctx.staging_metadata.crc32 == 0U) ||
+            (bootloader_calc_crc32(payload, (uint32_t)payload_len) !=
+             s_bl_ctx.staging_metadata.crc32)) {
+            return UDS_DOWNLOAD_VERIFY_ERROR;
+        }
+        return UDS_DOWNLOAD_OK;
+    }
+    uint8_t digest[32];
+    sha256_hash(payload, payload_len, digest);
+    uint8_t diff = 0U;
+    for (size_t i = 0U; i < sizeof(digest); ++i) {
+        diff |= (uint8_t)(digest[i] ^ s_bl_ctx.staging_metadata.sha256[i]);
+    }
+    return (diff == 0U) ? UDS_DOWNLOAD_OK : UDS_DOWNLOAD_VERIFY_ERROR;
+}
+
 static UdsDownloadResult c092_copy_candidate_to_slot_a(uint32_t image_size, uint32_t slot_a_addr) {
     /* 1. Erase Slot A for the candidate image size */
     UdsDownloadResult erase_res = bootloader_flash_erase_start(NULL, slot_a_addr, image_size);
@@ -426,9 +482,9 @@ static UdsDownloadResult c092_copy_candidate_to_slot_a(uint32_t image_size, uint
 
     /* 3. Read back from Slot A and verify CRC32 */
     const uint8_t *dest = (const uint8_t *)(uintptr_t)slot_a_addr;
-    uint32_t flash_crc = bootloader_calc_crc32(dest, image_size);
-    if ((s_bl_ctx.staging_metadata.crc32 != 0U) && (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
-        return UDS_DOWNLOAD_VERIFY_ERROR;
+    UdsDownloadResult verify_res = c092_verify_copied_image(dest, image_size);
+    if (verify_res != UDS_DOWNLOAD_OK) {
+        return verify_res;
     }
 #else
     uint32_t copy_len = (image_size > sizeof(s_mock_flash_slot_b))
@@ -440,9 +496,9 @@ static UdsDownloadResult c092_copy_candidate_to_slot_a(uint32_t image_size, uint
         return prog_res;
     }
 
-    uint32_t flash_crc = bootloader_calc_crc32(s_mock_flash_slot_a, copy_len);
-    if ((s_bl_ctx.staging_metadata.crc32 != 0U) && (flash_crc != s_bl_ctx.staging_metadata.crc32)) {
-        return UDS_DOWNLOAD_VERIFY_ERROR;
+    UdsDownloadResult verify_res = c092_verify_copied_image(s_mock_flash_slot_a, copy_len);
+    if (verify_res != UDS_DOWNLOAD_OK) {
+        return verify_res;
     }
 #endif
     return UDS_DOWNLOAD_OK;
@@ -698,38 +754,42 @@ static void parse_check_memory_metadata(const uint8_t *in, uint16_t in_len,
     if (in_len >= sizeof(FirmwareMetadata_t)) {
         (void)memcpy(temp_meta, in, sizeof(FirmwareMetadata_t));
         *meta_out = temp_meta;
-    } else if (in_len == 4U) {
-        /* 4-byte CRC-32 passed directly in routine parameter */
+    } else if ((in_len == 4U) && (s_bl_ctx.verify_mode == UDS_BL_VERIFY_MODE_CRC32)) {
+        /* 4-byte CRC-32 form. Only honoured when the INTEGRATOR selected CRC mode with
+         * uds_bootloader_set_verification_mode(); a tester can never downgrade the policy. */
         *temp_meta = s_bl_ctx.staging_metadata;
         temp_meta->magic = UDS_BL_METADATA_MAGIC;
         temp_meta->version = s_bl_ctx.active_version;
         temp_meta->crc32 = ((uint32_t)in[0] << 24) | ((uint32_t)in[1] << 16) |
                            ((uint32_t)in[2] << 8) | (uint32_t)in[3];
+        boot_finalize_metadata(temp_meta);
         *meta_out = temp_meta;
-        s_bl_ctx.verify_mode = UDS_BL_VERIFY_MODE_CRC32;
     }
 }
 
 static bool verify_candidate_crc32(const FirmwareMetadata_t *meta) {
     if (meta->crc32 == 0U) {
-        return true;
+        return false; /* a zero CRC used to mean "skip the check" */
     }
     uint32_t computed_crc = 0U;
     size_t avail = 0U;
+    bool payload_present = false;
     if (meta->image_size > sizeof(FirmwareMetadata_t)) {
         size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
         const uint8_t *payload = bootloader_get_slot_ptr(
             s_bl_ctx.target_slot_addr + (uint32_t)sizeof(FirmwareMetadata_t), &avail);
         if ((payload != NULL) && (avail >= payload_size)) {
             computed_crc = bootloader_calc_crc32(payload, (uint32_t)payload_size);
+            payload_present = true;
         }
     } else if (meta->image_size > 0U) {
         const uint8_t *payload = bootloader_get_slot_ptr(s_bl_ctx.target_slot_addr, &avail);
         if ((payload != NULL) && (avail >= meta->image_size)) {
             computed_crc = bootloader_calc_crc32(payload, meta->image_size);
+            payload_present = true;
         }
     }
-    return (computed_crc == meta->crc32);
+    return (payload_present && (computed_crc == meta->crc32));
 }
 
 static UdsCallbackResult verify_candidate_crypto(const FirmwareMetadata_t *meta,
@@ -737,14 +797,20 @@ static UdsCallbackResult verify_candidate_crypto(const FirmwareMetadata_t *meta,
     uint8_t computed_hash[32];
     Sha256Ctx sha;
     sha256_init(&sha);
-    if (meta->image_size > sizeof(FirmwareMetadata_t)) {
+    if (meta->image_size <= sizeof(FirmwareMetadata_t)) {
+        *out_status = 0x03U; /* an image with no payload is never valid */
+        return UDS_RESULT_ERROR;
+    }
+    {
         size_t payload_size = (size_t)(meta->image_size - sizeof(FirmwareMetadata_t));
         size_t avail = 0U;
         const uint8_t *payload = bootloader_get_slot_ptr(
             s_bl_ctx.target_slot_addr + (uint32_t)sizeof(FirmwareMetadata_t), &avail);
-        if ((payload != NULL) && (avail >= payload_size)) {
-            sha256_update(&sha, payload, payload_size);
+        if ((payload == NULL) || (avail < payload_size)) {
+            *out_status = 0x03U;
+            return UDS_RESULT_ERROR;
         }
+        sha256_update(&sha, payload, payload_size);
     }
     sha256_final(&sha, computed_hash);
 
@@ -754,7 +820,9 @@ static UdsCallbackResult verify_candidate_crypto(const FirmwareMetadata_t *meta,
     }
 
     if (s_signature_required) {
-        if (!uds_bootloader_verify_signature(meta->sha256, meta->signature)) {
+        uint8_t manifest[32];
+        boot_manifest_digest(meta, manifest); /* covers version + size + flags + payload hash */
+        if (!uds_bootloader_verify_signature(manifest, meta->signature)) {
             *out_status = 0x04U;
             return UDS_RESULT_SECURITY_DENIED;
         }
@@ -772,10 +840,24 @@ static UdsCallbackResult routine_check_memory(uint8_t subfunction, const uint8_t
         return UDS_RESULT_OK;
     }
 
-    const FirmwareMetadata_t *meta =
-        (const FirmwareMetadata_t *)(uintptr_t)s_bl_ctx.target_slot_addr;
+    const FirmwareMetadata_t *meta = NULL;
     FirmwareMetadata_t temp_meta;
     parse_check_memory_metadata(in, in_len, &temp_meta, &meta);
+    if (meta == NULL) {
+        /* No usable metadata in the request: fall back to the header stored at the start of
+         * the staging slot. Copy it out (packed struct, possibly unaligned) after a bounds
+         * check instead of dereferencing the raw slot address. */
+        size_t slot_avail = 0U;
+        const uint8_t *slot_hdr = bootloader_get_slot_ptr(s_bl_ctx.target_slot_addr, &slot_avail);
+        if ((slot_hdr == NULL) || (slot_avail < sizeof(temp_meta))) {
+            s_bl_ctx.last_check_memory_result = 0x01U;
+            out[0] = 0x01U;
+            *out_len = 1U;
+            return UDS_RESULT_OUT_OF_RANGE;
+        }
+        (void)memcpy(&temp_meta, slot_hdr, sizeof(temp_meta));
+        meta = &temp_meta;
+    }
 
     if (!boot_validate_metadata(meta)) {
         s_bl_ctx.last_check_memory_result = 0x01U;
@@ -784,7 +866,7 @@ static UdsCallbackResult routine_check_memory(uint8_t subfunction, const uint8_t
         return UDS_RESULT_OUT_OF_RANGE;
     }
 
-    if (meta->version < s_bl_ctx.active_version) {
+    if (meta->version < uds_bootloader_get_version_floor()) {
         s_bl_ctx.last_check_memory_result = 0x02U;
         out[0] = 0x02U;
         *out_len = 1U;

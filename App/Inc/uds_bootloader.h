@@ -1,6 +1,7 @@
 #ifndef STM32_UDS_ISO_TP_UDS_BOOTLOADER_H
 #define STM32_UDS_ISO_TP_UDS_BOOTLOADER_H
 
+#include "uds_iso_tp/boot_floor.h"
 #include "uds_iso_tp/uds.h"
 #include "uds_iso_tp/uds_download.h"
 
@@ -110,6 +111,14 @@ typedef bool (*UdsBootloaderSignatureVerifierFn)(const uint8_t *digest32,
                                                  const uint8_t *signature64);
 
 void uds_bootloader_init(void);
+
+/**
+ * Attach the persistent anti-rollback floor. With a floor attached, an image whose version is
+ * below max(active_version, floor) is refused, and the floor is raised (and persisted) when the
+ * new image is CONFIRMED. Pass NULL to detach (tests only).
+ */
+void uds_bootloader_set_floor_store(UdsBootFloor *floor_store);
+uint32_t uds_bootloader_get_version_floor(void);
 void uds_bootloader_set_target(UdsBootloaderTarget target);
 UdsBootloaderTarget uds_bootloader_get_target(void);
 
@@ -127,8 +136,10 @@ UdsDownloadResult uds_bootloader_activate_candidate(void);
 void uds_bootloader_set_signature_verifier(UdsBootloaderSignatureVerifierFn verifier);
 void uds_bootloader_set_signature_required(bool required);
 bool uds_bootloader_verify_signature(const uint8_t digest32[32], const uint8_t signature64[64]);
+#if defined(UDS_ISO_TP_TESTING)
 void uds_bootloader_calculate_manifest_signature(const uint8_t digest32[32],
                                                  uint8_t signature64[64]);
+#endif
 
 /* Power-fail-safe boot state journal & A/B slot descriptor */
 UdsBootloaderSlotStatus uds_bootloader_get_slot_status(void);

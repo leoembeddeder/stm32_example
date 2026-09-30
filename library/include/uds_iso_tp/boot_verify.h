@@ -52,4 +52,17 @@ uint32_t boot_calc_crc32(const uint8_t *data, size_t len);
 uint32_t boot_calc_metadata_crc(const FirmwareMetadata_t *hdr);
 bool boot_validate_metadata(const FirmwareMetadata_t *hdr);
 
+/**
+ * @brief Digest that the image signature must cover.
+ *
+ * SHA-256 over a domain tag plus every field that decides *whether and how* an
+ * image may be installed: magic, format version, firmware version (anti-rollback
+ * floor), image size, flags and the payload SHA-256. Runtime-mutable fields
+ * (status, boot_attempts, active_slot) are deliberately excluded.
+ */
+void boot_manifest_digest(const FirmwareMetadata_t *hdr, uint8_t out[32]);
+
+/** @brief Stamp format_version and header_crc32 so boot_validate_metadata() accepts hdr. */
+void boot_finalize_metadata(FirmwareMetadata_t *hdr);
+
 #endif /* BOOT_VERIFY_H */

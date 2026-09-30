@@ -14,7 +14,12 @@ typedef enum {
 } UdsSecurityState;
 #endif
 
-typedef void (*UdsSecurityStateSaveFn)(uint8_t failed_attempts, uint32_t lockout_remaining_ms,
+/**
+ * Persist the lockout state. Return false if the write failed: the gate then FAILS CLOSED
+ * (it stays in lockout) because an attacker could otherwise defeat the counter by making
+ * the storage write fail.
+ */
+typedef bool (*UdsSecurityStateSaveFn)(uint8_t failed_attempts, uint32_t lockout_remaining_ms,
                                        void *context);
 
 typedef struct {

@@ -1,3 +1,4 @@
+#include "boot_test_util.h"
 #include "uds_bootloader.h"
 
 #include <assert.h>
@@ -71,10 +72,7 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
 
     /* 6. RoutineControl 0x0202: CheckMemory & Anti-Rollback tests */
     FirmwareMetadata_t meta;
-    (void)memset(&meta, 0, sizeof(meta));
-    meta.magic = UDS_BL_METADATA_MAGIC;
-    meta.version = 0U; /* Downgrade attempt! Active version is 1 */
-    meta.image_size = sizeof(FirmwareMetadata_t);
+    bt_stage_image(&meta, 0U); /* Downgrade attempt! Active version is 1 */
 
     /* Anti-rollback downgrade must be rejected */
     assert(uds_bootloader_routine_control(
@@ -82,13 +80,8 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
                routine_out, &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OUT_OF_RANGE);
     assert(routine_out[0] == 0x02U); /* 0x02: Rejected downgrade */
 
-    /* Valid version 2 with correct SHA-256 digest */
-    meta.version = 2U;
-    const uint8_t empty_sha256[32] = {0xe3U, 0xb0U, 0xc4U, 0x42U, 0x98U, 0xfcU, 0x1cU, 0x14U,
-                                      0x9aU, 0xfbU, 0xf4U, 0xc8U, 0x99U, 0x6fU, 0xb9U, 0x24U,
-                                      0x27U, 0xaeU, 0x41U, 0xe4U, 0x64U, 0x9bU, 0x93U, 0x4cU,
-                                      0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
-    (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
+    /* Valid version 2 with a real payload and correct SHA-256 digest */
+    bt_stage_image(&meta, 2U);
 
     /* Missing / invalid signature must be rejected with 0x04 / SECURITY_DENIED */
     assert(uds_bootloader_routine_control(
@@ -96,8 +89,21 @@ static void test_c092_bootloader_memory_map_and_flow(void) {
                routine_out, &routine_out_len, sizeof(routine_out)) == UDS_RESULT_SECURITY_DENIED);
     assert(routine_out[0] == 0x04U); /* 0x04: Signature verification failed */
 
-    /* Compute valid cryptographic signature */
-    uds_bootloader_calculate_manifest_signature(meta.sha256, meta.signature);
+    /* Compute valid cryptographic signature over the manifest */
+    bt_sign(&meta);
+
+    /* The signature covers the version: relabelling the same signed bytes must fail. */
+    {
+        FirmwareMetadata_t relabelled = meta;
+        relabelled.version = 50U;
+        boot_finalize_metadata(&relabelled);
+        assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
+                                              (const uint8_t *)&relabelled, sizeof(relabelled),
+                                              routine_out, &routine_out_len,
+                                              sizeof(routine_out)) == UDS_RESULT_SECURITY_DENIED);
+        assert(routine_out[0] == 0x04U);
+        assert(!uds_bootloader_is_activation_pending());
+    }
 
     assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
                                           (const uint8_t *)&meta, sizeof(meta), routine_out,
@@ -190,16 +196,8 @@ static void test_c092_activate_candidate(void) {
 
     /* 2. Download and verify new candidate image (version 3) */
     FirmwareMetadata_t meta;
-    (void)memset(&meta, 0, sizeof(meta));
-    meta.magic = UDS_BL_METADATA_MAGIC;
-    meta.version = 3U;
-    meta.image_size = sizeof(FirmwareMetadata_t);
-    const uint8_t empty_sha256[32] = {0xe3U, 0xb0U, 0xc4U, 0x42U, 0x98U, 0xfcU, 0x1cU, 0x14U,
-                                      0x9aU, 0xfbU, 0xf4U, 0xc8U, 0x99U, 0x6fU, 0xb9U, 0x24U,
-                                      0x27U, 0xaeU, 0x41U, 0xe4U, 0x64U, 0x9bU, 0x93U, 0x4cU,
-                                      0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
-    (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
-    uds_bootloader_calculate_manifest_signature(meta.sha256, meta.signature);
+    bt_stage_image(&meta, 3U);
+    bt_sign(&meta);
 
     uint8_t routine_out[16];
     uint16_t routine_out_len = 0U;
@@ -237,13 +235,27 @@ static void test_c092_bootloader_crc32_mode(void) {
                                           routine_out, &routine_out_len,
                                           sizeof(routine_out)) == UDS_RESULT_OK);
 
-    /* Test CRC32 verification mode without SHA256 or signature */
+    /* CRC32 mode (integrator-selected): the CRC must match a real payload. */
     FirmwareMetadata_t meta;
-    (void)memset(&meta, 0, sizeof(meta));
-    meta.magic = UDS_BL_METADATA_MAGIC;
-    meta.version = 2U;
-    meta.image_size = sizeof(FirmwareMetadata_t);
-    meta.crc32 = 0U; /* Zero CRC ignored */
+    bt_stage_image(&meta, 2U);
+
+    /* A zero CRC is NOT a wildcard any more. */
+    FirmwareMetadata_t zero_crc = meta;
+    zero_crc.crc32 = 0U;
+    boot_finalize_metadata(&zero_crc);
+    assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
+                                          (const uint8_t *)&zero_crc, sizeof(zero_crc), routine_out,
+                                          &routine_out_len,
+                                          sizeof(routine_out)) == UDS_RESULT_ERROR);
+    assert(!uds_bootloader_is_activation_pending());
+
+    /* A wrong CRC is rejected too. */
+    FirmwareMetadata_t bad_crc = meta;
+    bad_crc.crc32 ^= 0x1U;
+    boot_finalize_metadata(&bad_crc);
+    assert(uds_bootloader_routine_control(
+               NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY, (const uint8_t *)&bad_crc, sizeof(bad_crc),
+               routine_out, &routine_out_len, sizeof(routine_out)) == UDS_RESULT_ERROR);
 
     assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
                                           (const uint8_t *)&meta, sizeof(meta), routine_out,
@@ -253,7 +265,51 @@ static void test_c092_bootloader_crc32_mode(void) {
     assert(uds_bootloader_get_slot_status() == UDS_BL_SLOT_CANDIDATE);
 }
 
+/* Regression: a tester must not be able to weaken the policy through the request itself. */
+static void test_c092_policy_cannot_be_downgraded_by_request(void) {
+    uds_bootloader_init();
+    uds_bootloader_set_target(UDS_BL_TARGET_STM32C092);
+    assert(uds_bootloader_get_verification_mode() == UDS_BL_VERIFY_MODE_SHA256_SECURE);
+
+    uint8_t out[16];
+    uint16_t out_len = 0U;
+
+    /* 4-byte "CRC only" form with an all-zero CRC and NO image at all. */
+    const uint8_t zero_crc[4] = {0U, 0U, 0U, 0U};
+    assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY, zero_crc,
+                                          sizeof(zero_crc), out, &out_len,
+                                          sizeof(out)) != UDS_RESULT_OK);
+    assert(!uds_bootloader_is_activation_pending());
+    assert(uds_bootloader_get_verification_mode() == UDS_BL_VERIFY_MODE_SHA256_SECURE);
+
+    /* Empty image (header only) with a "valid" hash-of-nothing and a signature is refused. */
+    FirmwareMetadata_t meta;
+    (void)memset(&meta, 0, sizeof(meta));
+    meta.magic = UDS_BL_METADATA_MAGIC;
+    meta.version = 0xFFFFFFF0U;
+    meta.image_size = (uint32_t)sizeof(FirmwareMetadata_t);
+    sha256_hash((const uint8_t *)"", 0U, meta.sha256);
+    boot_finalize_metadata(&meta);
+    bt_sign(&meta);
+    assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
+                                          (const uint8_t *)&meta, sizeof(meta), out, &out_len,
+                                          sizeof(out)) == UDS_RESULT_ERROR);
+    assert(out[0] == 0x03U);
+    assert(!uds_bootloader_is_activation_pending());
+
+    /* A legacy header (no format version / header CRC) is refused. */
+    FirmwareMetadata_t legacy;
+    bt_stage_image(&legacy, 2U);
+    legacy.format_version = 0U;
+    legacy.header_crc32 = 0U;
+    assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
+                                          (const uint8_t *)&legacy, sizeof(legacy), out, &out_len,
+                                          sizeof(out)) == UDS_RESULT_OUT_OF_RANGE);
+    assert(out[0] == 0x01U);
+}
+
 int main(void) {
+    test_c092_policy_cannot_be_downgraded_by_request();
     test_c092_bootloader_memory_map_and_flow();
     test_c092_bootloader_flash_verify_and_erase_poll();
     test_c092_activate_candidate();

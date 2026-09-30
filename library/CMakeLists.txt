@@ -37,6 +37,8 @@ add_library(uds_iso_tp_uds STATIC
     src/uds_wear_leveling.c
     src/uds_flash_fsm.c
     src/uds_security_gate.c
+    src/uds_security_nvm.c
+    src/boot_floor.c
     src/boot_verify.c)
 target_include_directories(uds_iso_tp_uds PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -178,6 +180,22 @@ if(UDS_ISO_TP_BUILD_TESTS)
     add_test(NAME uds_iso_tp_bootloader_dtc_contract
              COMMAND uds_iso_tp_bootloader_dtc_test)
 
+    add_executable(uds_iso_tp_boot_floor_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_boot_floor.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/boot_jump.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_platform.c)
+    target_include_directories(uds_iso_tp_boot_floor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto
+        ${CMAKE_CURRENT_SOURCE_DIR}/../App/Inc
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds)
+    target_link_libraries(uds_iso_tp_boot_floor_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_boot_floor_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_boot_floor_contract COMMAND uds_iso_tp_boot_floor_test)
+
     add_executable(uds_iso_tp_c092_bootloader_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_c092_bootloader.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../App/Src/uds_bootloader.c
@@ -246,6 +264,15 @@ if(UDS_ISO_TP_BUILD_TESTS)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_memory_service_contract
              COMMAND uds_iso_tp_memory_service_test)
+
+    add_executable(uds_iso_tp_security_nvm_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/uds/test_security_nvm.c)
+    target_include_directories(uds_iso_tp_security_nvm_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(uds_iso_tp_security_nvm_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_security_nvm_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_security_nvm_contract COMMAND uds_iso_tp_security_nvm_test)
 
     add_executable(uds_iso_tp_security_gate_test
         tests/uds/test_security_gate.c)

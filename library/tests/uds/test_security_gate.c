@@ -180,10 +180,11 @@ static void test_reset_session_and_ecu(void) {
 
 static uint8_t s_persisted_attempts = 0U;
 static uint32_t s_persisted_remaining = 0U;
-static void test_save_fn(uint8_t failed_attempts, uint32_t lockout_remaining_ms, void *context) {
+static bool test_save_fn(uint8_t failed_attempts, uint32_t lockout_remaining_ms, void *context) {
     (void)context;
     s_persisted_attempts = failed_attempts;
     s_persisted_remaining = lockout_remaining_ms;
+    return true;
 }
 
 static void test_persistence_and_restore(void) {

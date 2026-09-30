@@ -1,3 +1,4 @@
+#include "boot_test_util.h"
 #include "uds_bootloader.h"
 #include "uds_dtc_app.h"
 #include "uds_iso_tp/uds.h"
@@ -245,10 +246,7 @@ static void test_bootloader_flow(void) {
 
     /* 4. RoutineControl 0x0202: CheckMemory & Anti-Rollback tests */
     FirmwareMetadata_t meta;
-    (void)memset(&meta, 0, sizeof(meta));
-    meta.magic = UDS_BL_METADATA_MAGIC;
-    meta.version = 0U; /* Downgrade attempt! Active version is 1 */
-    meta.image_size = sizeof(FirmwareMetadata_t);
+    bt_stage_image(&meta, 0U); /* Downgrade attempt! Active version is 1 */
 
     uint8_t routine_out[16];
     uint16_t routine_out_len = 0U;
@@ -259,15 +257,8 @@ static void test_bootloader_flow(void) {
                routine_out, &routine_out_len, sizeof(routine_out)) == UDS_RESULT_OUT_OF_RANGE);
     assert(routine_out[0] == 0x02U); /* 0x02: Rejected downgrade */
 
-    /* Valid version (version 2 >= active version 1) */
-    meta.version = 2U;
-    /* Compute correct SHA-256 for zero-payload */
-    /* SHA-256 of empty string is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 */
-    const uint8_t empty_sha256[32] = {0xe3U, 0xb0U, 0xc4U, 0x42U, 0x98U, 0xfcU, 0x1cU, 0x14U,
-                                      0x9aU, 0xfbU, 0xf4U, 0xc8U, 0x99U, 0x6fU, 0xb9U, 0x24U,
-                                      0x27U, 0xaeU, 0x41U, 0xe4U, 0x64U, 0x9bU, 0x93U, 0x4cU,
-                                      0xa4U, 0x95U, 0x99U, 0x1bU, 0x78U, 0x52U, 0xb8U, 0x55U};
-    (void)memcpy(meta.sha256, empty_sha256, sizeof(empty_sha256));
+    /* Valid version (version 2 >= active version 1) with a real payload */
+    bt_stage_image(&meta, 2U);
 
     /* Missing / invalid signature must be rejected with 0x04 / SECURITY_DENIED */
     assert(uds_bootloader_routine_control(
@@ -275,8 +266,8 @@ static void test_bootloader_flow(void) {
                routine_out, &routine_out_len, sizeof(routine_out)) == UDS_RESULT_SECURITY_DENIED);
     assert(routine_out[0] == 0x04U); /* 0x04: Signature verification failed */
 
-    /* Compute valid cryptographic signature */
-    uds_bootloader_calculate_manifest_signature(meta.sha256, meta.signature);
+    /* Compute valid cryptographic signature over the manifest */
+    bt_sign(&meta);
 
     assert(uds_bootloader_routine_control(NULL, 0x01U, UDS_BL_ROUTINE_CHECK_MEMORY,
                                           (const uint8_t *)&meta, sizeof(meta), routine_out,

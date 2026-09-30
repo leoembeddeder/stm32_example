@@ -56,13 +56,15 @@ void uds_security_gate_tick(UdsSecurityGate *gate, uint32_t now_ms) {
         gate->initial_delay_active = false;
     }
     if (gate->lockout_active && time_expired(now_ms, gate->lockout_until_ms)) {
-        gate->lockout_active = false;
-        gate->failed_attempts = 0U;
-        if (gate->state == UDS_SECURITY_STATE_LOCKOUT) {
-            gate->state = UDS_SECURITY_STATE_LOCKED_READY;
-        }
-        if (gate->persist_fn != NULL) {
-            gate->persist_fn(0U, 0U, gate->persist_context);
+        if ((gate->persist_fn != NULL) && !gate->persist_fn(0U, 0U, gate->persist_context)) {
+            /* Storage is not accepting writes: never release the lockout on RAM state alone. */
+            gate->lockout_until_ms = now_ms + gate->lockout_ms;
+        } else {
+            gate->lockout_active = false;
+            gate->failed_attempts = 0U;
+            if (gate->state == UDS_SECURITY_STATE_LOCKOUT) {
+                gate->state = UDS_SECURITY_STATE_LOCKED_READY;
+            }
         }
     }
     if (gate->seed_timer_active && time_expired(now_ms, gate->seed_expiry_ms)) {
@@ -112,7 +114,12 @@ void uds_security_gate_record_failure(UdsSecurityGate *gate, uint32_t now_ms) {
         uint32_t remaining = (gate->lockout_active && (gate->lockout_until_ms > now_ms))
                                  ? (gate->lockout_until_ms - now_ms)
                                  : 0U;
-        gate->persist_fn(gate->failed_attempts, remaining, gate->persist_context);
+        if (!gate->persist_fn(gate->failed_attempts, remaining, gate->persist_context)) {
+            /* Fail closed: a failed write must never hand the attacker a free guess. */
+            gate->lockout_active = true;
+            gate->lockout_until_ms = now_ms + gate->lockout_ms;
+            gate->state = UDS_SECURITY_STATE_LOCKOUT;
+        }
     }
 }
 
@@ -125,7 +132,9 @@ void uds_security_gate_record_success(UdsSecurityGate *gate, uint8_t level) {
     uds_security_gate_invalidate_seed(gate);
     gate->state = UDS_SECURITY_STATE_UNLOCKED;
     if (gate->persist_fn != NULL) {
-        gate->persist_fn(0U, 0U, gate->persist_context);
+        /* Best effort: if this write fails the stored counter stays >= the real one, which is
+         * the safe direction (more conservative after the next reset). */
+        (void)gate->persist_fn(0U, 0U, gate->persist_context);
     }
 }
 
