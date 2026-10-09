@@ -73,7 +73,7 @@ void svc_write_memory_by_address(const uds_request_t *req, uds_response_t *resp)
         return;
     }
 
-    memcpy((void *)address, &req->data[header_len], size);
+    memcpy((void *)(uintptr_t)address, &req->data[header_len], size);
 
     resp->data[0] = UDS_POSITIVE_RESPONSE(req->sid);
     memcpy(&resp->data[1], &req->data[0], header_len);

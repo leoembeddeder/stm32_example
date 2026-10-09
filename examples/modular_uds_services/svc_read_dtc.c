@@ -1,53 +1,12 @@
+/**
+ * @file svc_read_dtc.c
+ * @brief UDS Service 0x19: ReadDTCInformation (ISO 14229-1)
+ * @details Integrates seamlessly with dtc_store.h without duplicate type definitions.
+ */
+
 #include "svc_read_dtc.h"
+#include "dtc_store.h"
 #include <string.h>
-
-/* Mock DTC entry structure for the modular service example */
-typedef struct {
-    uint32_t dtc;
-    uint8_t status;
-    bool has_snapshot;
-    uint8_t snapshot[8];
-    uint8_t snapshot_len;
-    bool has_extdata;
-    uint8_t extdata[8];
-    uint8_t extdata_len;
-} dtc_entry_t;
-
-static const dtc_entry_t s_mock_dtcs[] = {
-    {0x010000U, 0x2FU, true, {0x01, 0x02}, 2U, true, {0x10, 0x20}, 2U},
-    {0xC10000U, 0x08U, false, {0}, 0U, false, {0}, 0U},
-    {0x800100U, 0x01U, false, {0}, 0U, false, {0}, 0U},
-};
-
-static uint8_t dtc_store_count(void) {
-    return (uint8_t)(sizeof(s_mock_dtcs) / sizeof(s_mock_dtcs[0]));
-}
-
-static const dtc_entry_t *dtc_store_get_by_index(uint8_t index) {
-    if (index >= dtc_store_count()) return NULL;
-    return &s_mock_dtcs[index];
-}
-
-static const dtc_entry_t *dtc_store_find(uint32_t dtc) {
-    for (uint8_t i = 0U; i < dtc_store_count(); ++i) {
-        if (s_mock_dtcs[i].dtc == dtc) return &s_mock_dtcs[i];
-    }
-    return NULL;
-}
-
-static uint8_t dtc_store_get_status_mask(void) {
-    return 0xFFU;
-}
-
-static uint16_t dtc_store_count_by_mask(uint8_t status_mask) {
-    uint16_t count = 0U;
-    for (uint8_t i = 0U; i < dtc_store_count(); ++i) {
-        if ((s_mock_dtcs[i].status & status_mask) != 0U) {
-            count++;
-        }
-    }
-    return count;
-}
 
 void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
     if (req->data_len < 1U) {
@@ -60,7 +19,7 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
 
     uint8_t raw_sub = req->data[0];
     uint8_t sub = raw_sub & 0x7FU;
-    bool suppress = (raw_sub & 0x80U) != 0U;
+    bool suppress = ((raw_sub & 0x80U) != 0U);
     uint8_t avail_mask = dtc_store_get_status_mask();
 
     switch (sub) {
@@ -105,7 +64,9 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         uint8_t total = dtc_store_count();
         for (uint8_t i = 0U; i < total; i++) {
             const dtc_entry_t *e = dtc_store_get_by_index(i);
-            if ((e == NULL) || ((e->status & req_mask) == 0U)) continue;
+            if ((e == NULL) || ((e->status & req_mask) == 0U)) {
+                continue;
+            }
 
             if ((pos + 4U) > ISOTP_TX_BUF_SIZE) {
                 resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
@@ -135,7 +96,9 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         uint8_t total = dtc_store_count();
         for (uint8_t i = 0U; i < total; i++) {
             const dtc_entry_t *e = dtc_store_get_by_index(i);
-            if (e == NULL) continue;
+            if (e == NULL) {
+                continue;
+            }
 
             if ((pos + 4U) > ISOTP_TX_BUF_SIZE) {
                 resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
@@ -157,7 +120,7 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
 
     case 0x04: {
         /* reportDTCSnapshotRecordByDTCNumber */
-        if (req->data_len < 4U) {
+        if (req->data_len < 5U) { /* SubFunction + DTC (3B) + RecordNum (1B) */
             resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
             resp->data[1] = req->sid;
             resp->data[2] = NRC_INCORRECT_MSG_LEN_OR_FORMAT;
@@ -167,6 +130,7 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         uint32_t dtc = ((uint32_t)req->data[1] << 16U) |
                        ((uint32_t)req->data[2] << 8U)  |
                        (uint32_t)req->data[3];
+        uint8_t rec_num = req->data[4];
 
         const dtc_entry_t *e = dtc_store_find(dtc);
         if (e == NULL) {
@@ -185,8 +149,7 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         resp->data[5] = e->status;
         uint16_t pos = 6U;
 
-        if (e->has_snapshot) {
-            resp->data[pos++] = 0x01U;
+        if (e->has_snapshot && ((rec_num == 0x01U) || (rec_num == 0xFFU))) {
             if ((pos + e->snapshot_len) <= ISOTP_TX_BUF_SIZE) {
                 memcpy(&resp->data[pos], e->snapshot, e->snapshot_len);
                 pos = (uint16_t)(pos + e->snapshot_len);
@@ -198,8 +161,8 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
     }
 
     case 0x06: {
-        /* reportDTCExtDataRecordByDTCNumber */
-        if (req->data_len < 4U) {
+        /* reportDTCExtDataRecordByDTCNumber (Issue #108) */
+        if (req->data_len < 5U) { /* SubFunction + DTC (3B) + RecordNum (1B) */
             resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
             resp->data[1] = req->sid;
             resp->data[2] = NRC_INCORRECT_MSG_LEN_OR_FORMAT;
@@ -209,6 +172,7 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         uint32_t dtc = ((uint32_t)req->data[1] << 16U) |
                        ((uint32_t)req->data[2] << 8U)  |
                        (uint32_t)req->data[3];
+        uint8_t rec_num = req->data[4];
 
         const dtc_entry_t *e = dtc_store_find(dtc);
         if (e == NULL) {
@@ -227,11 +191,19 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         resp->data[5] = e->status;
         uint16_t pos = 6U;
 
-        if (e->has_extdata) {
-            resp->data[pos++] = 0x01U;
-            if ((pos + e->extdata_len) <= ISOTP_TX_BUF_SIZE) {
-                memcpy(&resp->data[pos], e->extdata, e->extdata_len);
-                pos = (uint16_t)(pos + e->extdata_len);
+        /* Extended Data Record 0x01: Fault Occurrence Counter */
+        if ((rec_num == 0x01U) || (rec_num == 0xFFU)) {
+            if ((pos + 2U) <= ISOTP_TX_BUF_SIZE) {
+                resp->data[pos++] = 0x01U; /* Record number */
+                resp->data[pos++] = e->occurrence_counter;
+            }
+        }
+
+        /* Extended Data Record 0x02: Aging Counter */
+        if ((rec_num == 0x02U) || (rec_num == 0xFFU)) {
+            if ((pos + 2U) <= ISOTP_TX_BUF_SIZE) {
+                resp->data[pos++] = 0x02U; /* Record number */
+                resp->data[pos++] = e->aging_counter;
             }
         }
 

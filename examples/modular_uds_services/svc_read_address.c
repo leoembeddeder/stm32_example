@@ -71,6 +71,6 @@ void svc_read_memory_by_address(const uds_request_t *req, uds_response_t *resp) 
     }
 
     resp->data[0] = UDS_POSITIVE_RESPONSE(req->sid);
-    memcpy(&resp->data[1], (const void *)address, size);
+    memcpy(&resp->data[1], (const void *)(uintptr_t)address, size);
     resp->len = (uint16_t)(1U + size);
 }
