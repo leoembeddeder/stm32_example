@@ -105,7 +105,7 @@ void app_on_ignition_off(void) {
     printf("[ECU] Ignition OFF: Ending driving cycle, updating unlearning/aging counters.\n");
     dtc_operation_cycle_end(s_runtime_dtcs, DTC_CONFIGURED_COUNT);
 
-    /* Sync updated aging counter back to store */
+    /* Update aging counter back to store */
     for (uint8_t i = 0; i < DTC_CONFIGURED_COUNT; i++) {
         const dtc_runtime_item_t *it = &s_runtime_dtcs[i];
         dtc_entry_t *entry = dtc_store_find_mut(it->dtc);
