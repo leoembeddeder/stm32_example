@@ -107,10 +107,11 @@ void app_on_ignition_off(void) {
 
     /* Sync updated aging counter back to store */
     for (uint8_t i = 0; i < DTC_CONFIGURED_COUNT; i++) {
-        dtc_entry_t *entry = dtc_store_find_mut(s_runtime_dtcs[i].dtc);
+        const dtc_runtime_item_t *it = &s_runtime_dtcs[i];
+        dtc_entry_t *entry = dtc_store_find_mut(it->dtc);
         if (entry != NULL) {
-            entry->status = s_runtime_dtcs[i].status;
-            entry->aging_counter = s_runtime_dtcs[i].aging_counter;
+            entry->status = it->status;
+            entry->aging_counter = it->aging_counter;
         }
     }
 }

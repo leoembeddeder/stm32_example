@@ -46,4 +46,9 @@ uint8_t uds_server_dispatch_get_session(void);
 
 bool uds_server_dispatch_process(const uint8_t *data, uint16_t len, bool functional, uds_response_t *resp);
 
+/**
+ * @brief Refresh active session S3 timeout timer (ISO 14229-1 S3server)
+ */
+void uds_session_refresh(void);
+
 #endif /* UDS_SERVER_DISPATCH_H */

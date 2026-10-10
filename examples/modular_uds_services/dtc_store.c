@@ -172,22 +172,24 @@ void dtc_process_sample(dtc_runtime_item_t *item, bool sample_failed, int8_t ste
 void dtc_operation_cycle_start(dtc_runtime_item_t *items, uint8_t count) {
     if (items == NULL) return;
     for (uint8_t i = 0U; i < count; i++) {
-        items[i].status &= (uint8_t)~(DTC_STATUS_TEST_FAILED | DTC_STATUS_TEST_FAILED_THIS_CYCLE);
-        items[i].status |= DTC_STATUS_NOT_COMPLETED_CYCLE;
-        items[i].fault_detection_counter = 0;
+        dtc_runtime_item_t *it = &items[i];
+        it->status &= (uint8_t)~(DTC_STATUS_TEST_FAILED | DTC_STATUS_TEST_FAILED_THIS_CYCLE);
+        it->status |= DTC_STATUS_NOT_COMPLETED_CYCLE;
+        it->fault_detection_counter = 0;
     }
 }
 
 void dtc_operation_cycle_end(dtc_runtime_item_t *items, uint8_t count) {
     if (items == NULL) return;
     for (uint8_t i = 0U; i < count; i++) {
+        dtc_runtime_item_t *it = &items[i];
         /* Unlearning / Aging: increment aging if confirmed and didn't fail this cycle */
-        if ((items[i].status & DTC_STATUS_CONFIRMED) != 0U) {
-            if ((items[i].status & DTC_STATUS_TEST_FAILED_THIS_CYCLE) == 0U) {
-                items[i].aging_counter++;
-                if (items[i].aging_counter >= DTC_AGING_CYCLES_MAX) {
-                    items[i].status &= (uint8_t)~DTC_STATUS_CONFIRMED;
-                    items[i].aging_counter = 0U;
+        if ((it->status & DTC_STATUS_CONFIRMED) != 0U) {
+            if ((it->status & DTC_STATUS_TEST_FAILED_THIS_CYCLE) == 0U) {
+                it->aging_counter++;
+                if (it->aging_counter >= DTC_AGING_CYCLES_MAX) {
+                    it->status &= (uint8_t)~DTC_STATUS_CONFIRMED;
+                    it->aging_counter = 0U;
                 }
             }
         }

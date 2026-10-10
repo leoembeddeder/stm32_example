@@ -54,8 +54,22 @@ static void build_nrc(uds_response_t *resp, uint8_t sid, uint8_t nrc) {
     resp->suppress = false;
 }
 
+/* Weak default fallback for standalone build: automatically overridden when linked with uds_session.c */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) void uds_session_refresh(void) {
+    /* Standalone no-op */
+}
+#elif defined(__CC_ARM) || defined(__ARMCC_VERSION)
+__weak void uds_session_refresh(void) {
+    /* Keil ARMCC weak fallback */
+}
+#endif
+
 bool uds_server_dispatch_process(const uint8_t *data, uint16_t len, bool functional, uds_response_t *resp) {
     if ((data == NULL) || (len < 1U) || (resp == NULL)) return false;
+
+    /* Refresh S3 timer on any valid request (ISO 14229-1 S3server) */
+    uds_session_refresh();
 
     uint8_t sid = data[0];
     memset(resp, 0, sizeof(*resp));
